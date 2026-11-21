@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Boladão",
+  "version": "1.0.0",
+  "identifier": "br.boladao.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../build-web"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: http://boladaomedia.localhost boladaomedia:; connect-src 'self' ipc: http://ipc.localhost http://boladaomedia.localhost"
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": [
+      "nsis"
+    ],
+    "publisher": "hyak",
+    "category": "Video",
+    "shortDescription": "Downloader de vídeo e áudio com yt-dlp, Deno e FFmpeg embutidos",
+    "longDescription": "Aplicativo desktop para Windows com yt-dlp, Deno e FFmpeg integrados, fila persistente, limitador de banda, Modo Jogo e biblioteca local.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "PortugueseBR"
+        ],
+        "compression": "zlib",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "nsis/header.bmp",
+        "sidebarImage": "nsis/sidebar.bmp",
+        "installerHooks": "nsis/hooks.nsh"
+      }
+    }
+  }
+}
