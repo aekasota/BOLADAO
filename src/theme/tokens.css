@@ -1,0 +1,414 @@
+@font-face {
+  font-family: "Archivo";
+  src: url("../assets/fonts/Archivo-Variable.ttf") format("truetype-variations");
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/JetBrainsMono-Variable.ttf") format("truetype-variations");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: block;
+}
+
+:root,
+[data-theme="sangue"] {
+  --op-a: #FA023E;
+  --op-b: #161616;
+  --bg: #0E0E10;
+  --surface-1: #17171A;
+  --surface-2: #1F1F23;
+  --line: #2A2A2F;
+  --text: #F2EEE6;
+  --text-2: #A8A39C;
+  --text-3: #948F89;
+  --accent: #FA023E;
+  --accent-text: #FF5C7A;
+  --on-accent: #0E0E10;
+  --warn: #FFB547;
+  --ok: #3DDC84;
+  --stripe-fg: #FA023E;
+  --stripe-bg: #161616;
+}
+
+[data-theme="papel"] {
+  --op-a: #161616;
+  --op-b: #F2EEE6;
+  --bg: #F2EEE6;
+  --surface-1: #EAE4D8;
+  --surface-2: #DFD8CA;
+  --line: #C7BFB0;
+  --text: #161616;
+  --text-2: #3D3A36;
+  --text-3: #54504A;
+  --accent: #C80032;
+  --accent-text: #B0002B;
+  --on-accent: #F9F6F0;
+  --warn: #8A4B00;
+  --ok: #146C3B;
+  --stripe-fg: #C80032;
+  --stripe-bg: #DFD8CA;
+}
+
+[data-theme="acido"] {
+  --op-a: #C6FF00;
+  --op-b: #121212;
+  --bg: #0D0E0B;
+  --surface-1: #151712;
+  --surface-2: #1D2019;
+  --line: #2B3025;
+  --text: #F2F4EA;
+  --text-2: #ABB0A0;
+  --text-3: #919786;
+  --accent: #C6FF00;
+  --accent-text: #C6FF00;
+  --on-accent: #121212;
+  --warn: #FFB547;
+  --ok: #5EF28E;
+  --stripe-fg: #C6FF00;
+  --stripe-bg: #151712;
+}
+
+[data-theme="cobalto"] {
+  --op-a: #2B4BFF;
+  --op-b: #0D0F1A;
+  --bg: #0B0D16;
+  --surface-1: #121624;
+  --surface-2: #1A2033;
+  --line: #27304A;
+  --text: #EDF0FA;
+  --text-2: #A3ACC4;
+  --text-3: #8B95B0;
+  --accent: #5B78FF;
+  --accent-text: #7B93FF;
+  --on-accent: #0B0D16;
+  --warn: #FFB547;
+  --ok: #42E396;
+  --stripe-fg: #2B4BFF;
+  --stripe-bg: #0D0F1A;
+}
+
+:root {
+  --font-sans: "Archivo", "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", Consolas, monospace;
+
+  --radius-panel: 10px;
+  --radius-input: 12px;
+  --radius-pill: 999px;
+
+  --dur-micro: 120ms;
+  --dur-small: 200ms;
+  --dur-med: 320ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  font-variation-settings: "wdth" 100, "wght" 450;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+input,
+textarea,
+pre,
+code,
+.selectable {
+  user-select: text;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+/* Custom browser surfaces (scrollbars, range, caret) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3);
+}
+
+/* Display typography helper — expanded Archivo matching Section 13.3 */
+.font-display {
+  font-family: var(--font-sans);
+  font-variation-settings: "wdth" 125, "wght" 860;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+}
+
+.font-mono-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Top Architectural Notch Header + Brand Cutout Pill */
+.notch-header-shell {
+  position: relative;
+  height: 50px;
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 25;
+  flex-shrink: 0;
+}
+
+.notch-top-rim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--line);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.notch-dock {
+  position: relative;
+  z-index: 3;
+  height: 42px;
+  padding: 5px 6px 5px;
+  background: var(--surface-1);
+  border-radius: 0 0 16px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Continuous 1px border below the 14px concave shoulder fillets */
+.notch-dock::after {
+  content: "";
+  position: absolute;
+  top: 17px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  border-radius: 0 0 16px 16px;
+  pointer-events: none;
+}
+
+.notch-ear {
+  position: absolute;
+  top: 3px;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  display: block;
+}
+
+.notch-ear-left {
+  left: -13px;
+}
+
+.notch-ear-right {
+  right: -13px;
+}
+
+.notch-tab-btn {
+  position: relative;
+  height: 31px;
+  padding: 0 13px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  z-index: 1;
+  transition: color var(--dur-micro) var(--ease-out);
+}
+
+.notch-tab-btn[data-active="false"]:hover {
+  color: var(--text) !important;
+}
+
+/* Left Brand Pill with true geometric cutout ("furo") revealing live WebGL2 shader */
+.brand-corner-pill {
+  position: absolute;
+  top: 9px;
+  left: 14px;
+  height: 32px;
+  padding: 0 11px 0 6px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 3;
+  overflow: hidden;
+}
+
+.brand-pill-bg-mask {
+  position: absolute;
+  inset: 0;
+  background: var(--surface-1);
+  pointer-events: none;
+  z-index: -1;
+  -webkit-mask-image:
+    linear-gradient(#000, #000),
+    linear-gradient(#000, #000);
+  mask-image:
+    linear-gradient(#000, #000),
+    linear-gradient(#000, #000);
+  -webkit-mask-size: 100% 100%, 24px 16px;
+  mask-size: 100% 100%, 24px 16px;
+  -webkit-mask-position: 0 0, 6px 7px;
+  mask-position: 0 0, 6px 7px;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-composite: destination-out;
+  mask-composite: exclude;
+}
+
+.brand-hole-badge {
+  width: 24px;
+  height: 16px;
+  border: 2px solid var(--text);
+  border-radius: 4px;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.window-controls-pill {
+  position: absolute;
+  top: 9px;
+  right: 14px;
+  height: 32px;
+  padding: 0 3px;
+  border-radius: 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  z-index: 3;
+}
+
+.win-ctrl-btn {
+  width: 28px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+
+.win-ctrl-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.win-ctrl-close:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Op-Art striped skeleton for loading states */
+@keyframes op-stripe-slide {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 28px 0;
+  }
+}
+
+.op-skeleton {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--surface-1) 0px,
+    var(--surface-1) 10px,
+    var(--surface-2) 10px,
+    var(--surface-2) 20px
+  );
+  background-size: 28px 28px;
+  animation: op-stripe-slide 0.9s linear infinite;
+}
+
+[data-reduce-motion="true"] .op-skeleton {
+  animation: none;
+}
+
+/* Solid panels — zero blur, zero glassmorphism, zero shadows */
+.op-panel {
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.op-plate {
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-input);
+}
+
+.op-input {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-input);
+  caret-color: var(--accent);
+  font-family: var(--font-sans);
+  transition: border-color var(--dur-micro) var(--ease-out);
+}
+
+.op-input::placeholder {
+  color: var(--text-3);
+}
+
+.op-input:focus {
+  outline: none;
+  border-color: var(--text);
+}

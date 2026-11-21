@@ -1,0 +1,26 @@
+{
+  "ytdlp": {
+    "name": "yt-dlp",
+    "version": "2026.10.26",
+    "asset": "yt-dlp_win.zip",
+    "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp_win.zip",
+    "checksum_url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/SHA2-256SUMS",
+    "sha256": "fd51b212cf8380c7a52ee08c0d6be7f3c59b2f2c832eaf7b45acfae6eab57419"
+  },
+  "deno": {
+    "name": "deno",
+    "version": "2.9.8",
+    "asset": "deno-x86_64-pc-windows-msvc.zip",
+    "url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip",
+    "checksum_url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip.sha256sum",
+    "sha256": "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf"
+  },
+  "ffmpeg": {
+    "name": "ffmpeg",
+    "version": "9.0.2",
+    "asset": "ffmpeg-9.0.2-full_build-shared.zip",
+    "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-full_build-shared.zip",
+    "checksum_url": null,
+    "sha256": "8d31e162f1616e37aab3fa2db991b97e1b8dbeb1c8465fd81a81be16ff91b328"
+  }
+}
