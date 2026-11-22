@@ -185,7 +185,11 @@ pub fn apply_pending(relaunch: bool) -> Result<bool, String> {
 
     if relaunch {
         let dir = current.parent().map(Path::to_path_buf).unwrap_or_default();
+        // The new version waits for this process to close; otherwise it would find the old one
+        // still open and hand control back to it.
         std::process::Command::new(&current)
+            .arg(crate::instance::WAIT_FOR_PID_ARG)
+            .arg(std::process::id().to_string())
             .current_dir(dir)
             .spawn()
             .map_err(|e| format!("Atualizado, mas não foi possível reabrir o Boladão: {e}"))?;

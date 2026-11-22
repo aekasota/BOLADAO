@@ -389,6 +389,10 @@ export const StripeProgress: React.FC<{
   );
 };
 
+// Monochrome marks follow the theme's text color: a fixed light or dark tone would vanish into
+// the background of one of the themes (X's cream on Papel, for instance).
+const MONOCHROME_BRANDS = new Set(["x"]);
+
 export const PlatformIcon: React.FC<{
   slug: string;
   color?: string;
@@ -403,7 +407,7 @@ export const PlatformIcon: React.FC<{
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill={color}
+      fill={MONOCHROME_BRANDS.has(slug) ? "var(--text)" : color}
       aria-hidden="true"
       style={{ flexShrink: 0 }}
     >

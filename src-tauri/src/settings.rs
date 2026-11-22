@@ -10,7 +10,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -66,7 +66,6 @@ pub struct AppSettings {
     pub light_limit_bps: u64,
     pub peak_7d_bps: u64,
     pub speed_unit: SpeedUnit,
-    pub monitor_clipboard_background: bool,
     pub tray_notice_shown: bool,
 
     // Game Mode
@@ -134,7 +133,6 @@ impl Default for AppSettings {
             light_limit_bps: 2 * 1024 * 1024,
             peak_7d_bps: 0,
             speed_unit: SpeedUnit::BytesPerSec,
-            monitor_clipboard_background: false,
             tray_notice_shown: false,
 
             game_mode_auto: true,
@@ -198,14 +196,45 @@ pub fn load_or_init_settings() -> AppSettings {
 }
 
 pub fn save_settings_to_disk(settings: &AppSettings) -> Result<(), String> {
-    let path = settings_path();
+    write_settings_file(&settings_path(), settings)
+}
+
+/// Writes next to the target and renames over it. `fs::rename` replaces the old file in one step,
+/// so if the app dies midway the previous settings stay in place.
+fn write_settings_file(path: &Path, settings: &AppSettings) -> Result<(), String> {
     let tmp = path.with_extension("json.tmp");
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
     fs::write(&tmp, json).map_err(|e| format!("Erro salvando settings.json: {e}"))?;
-    if path.exists() {
-        let _ = fs::remove_file(&path);
+    fs::rename(&tmp, path).map_err(|e| format!("Erro confirmando settings.json: {e}"))
+}
+
+#[cfg(test)]
+mod save_tests {
+    use super::*;
+
+    #[test]
+    fn saving_replaces_the_previous_file_and_leaves_no_temporary() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let mut cfg = AppSettings::default();
+        write_settings_file(&path, &cfg).unwrap();
+        cfg.global_concurrency = 5;
+        write_settings_file(&path, &cfg).unwrap();
+
+        let saved: AppSettings = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(saved.global_concurrency, 5);
+        assert!(!path.with_extension("json.tmp").exists());
     }
-    fs::rename(&tmp, &path).map_err(|e| format!("Erro confirmando settings.json: {e}"))
+
+    #[test]
+    fn settings_saved_by_older_versions_still_load() {
+        // 1.1.0 and earlier saved `monitor_clipboard_background`, an option that never worked.
+        let mut json = serde_json::to_value(AppSettings::default()).unwrap();
+        json["monitor_clipboard_background"] = serde_json::Value::Bool(true);
+        json["global_concurrency"] = 4.into();
+        let loaded: AppSettings = serde_json::from_value(json).unwrap();
+        assert_eq!(loaded.global_concurrency, 4);
+    }
 }
 
 #[cfg(test)]

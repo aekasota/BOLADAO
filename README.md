@@ -236,7 +236,7 @@ A fila fica salva em SQLite. Pausar e retomar continua do ponto em que parou, e 
 - Cada item mostra as últimas 300 linhas do log do yt-dlp e permite copiar o comando equivalente, com a credencial do proxy local mascarada.
 - Arraste um item concluído pela alça ⋮⋮ direto para o Explorer, o Premiere, o DaVinci Resolve ou a sua DAW.
 - O ícone na barra de tarefas mostra o progresso médio. A notificação aparece quando a fila esvazia, agrupa downloads que terminaram juntos e fica em silêncio no Modo Jogo.
-- Fechar a janela com downloads em andamento leva o app para a bandeja do sistema, onde dá para pausar, retomar e trocar o limite de banda.
+- Fechar a janela com downloads em andamento leva o app para a bandeja do sistema, onde dá para pausar, retomar e trocar o limite de banda. Abrir o Boladão de novo só traz essa janela de volta, e *Sair* não perde nada: o que estava baixando ou na fila continua na próxima abertura.
 
 ### Banda e Modo Jogo
 
@@ -398,7 +398,7 @@ O Tauri sobe o Vite em `http://localhost:1420` e abre o app com recarga a quente
 # Verificação do TypeScript (tsc) e build de produção do frontend
 npm run build
 
-# 27 testes em Rust
+# 32 testes em Rust
 cd src-tauri
 cargo test
 ```
@@ -415,6 +415,8 @@ Os testes cobrem:
 - cookies: criptografia DPAPI de verdade, migração dos `.txt` antigos e devolução dos cookies renovados pelo yt-dlp;
 - retomada: quais pastas temporárias podem ser limpas e a remoção restrita aos arquivos do item cancelado;
 - atualização: comparação de versões, recusa de arquivo adulterado e troca do executável só com assinatura válida;
+- instância única: a segunda abertura é recusada e acorda a primeira, e a versão nova espera a antiga fechar;
+- protocolo de mídia restrito aos nomes que o app gera, e `settings.json` regravado sem apagar o anterior, abrindo também os ajustes de versões antigas;
 - o limitador de verdade: 20 MB a 2 MB/s em 10 s (±10%) e troca de limite no meio da transferência em menos de 1 s. Só esse teste leva uns 12 s.
 
 ### 6. Gerar o instalador
@@ -504,10 +506,11 @@ Os motores viajam dentro do binário. O `build.rs` comprime cada componente em u
 - **Sem shell no caminho da mídia.** yt-dlp, FFmpeg, FFprobe e Deno são iniciados direto com `Command::new` e uma lista de `OsString`, com `--` antes da URL e a flag `CREATE_NO_WINDOW`. Só links `http://` e `https://` passam.
 - **Flags perigosas bloqueadas.** Argumentos extras do usuário passam por `validate_extra_args`, que recusa `--exec`, `-o`/`--output`, `-P`/`--paths`, `--proxy`, `--ffmpeg-location`, `--js-runtimes`, `--netrc`, `--netrc-cmd`, `--netrc-location`, `-a`/`--batch-file`, `--config-locations`, `--load-info-json`, `--plugin-dirs`, `--print-to-file` e as variantes de `--write-*-link`.
 - **Nenhum processo órfão.** Cada download roda num Job Object com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`: cancelar, pausar ou fechar o app encerra a árvore inteira de processos. O processo nasce suspenso e só é retomado depois de entrar no Job Object, então nem ele nem os processos que ele abre rodam fora do grupo. Se a associação falhar, o processo é encerrado e o download falha com erro, em vez de seguir solto.
+- **Uma instância por sessão.** Uma segunda abertura só traz para a frente a janela que já está aberta, antes de tocar na fila. Duas instâncias baixariam os mesmos itens duas vezes, nos mesmos arquivos.
 - **Cookies criptografados.** Cookies de sessão valem como senha, então ficam guardados com a DPAPI do Windows, presos à sua conta de usuário. A cópia em texto que o yt-dlp exige existe só enquanto ele roda; os cookies que ele renova voltam criptografados, e cópias esquecidas por um fechamento abrupto são apagadas na abertura seguinte.
 - **Atualizações assinadas.** O app só instala um executável cuja assinatura minisign confira com a chave pública embutida nele, e só de URLs das releases deste repositório. A assinatura é conferida no download e de novo antes de trocar o executável.
 - **IPC isolado.** [`src-tauri/capabilities/default.json`](src-tauri/capabilities/default.json) libera comandos só para a janela `main`. As janelas de login (`login-*`) usam um diretório de dados próprio e não têm acesso nenhum ao backend.
-- **CSP restrita.** Só scripts da própria origem rodam. O protocolo `boladaomedia://` serve apenas arquivos das pastas de cache e recusa `..`, `/` e `\` no nome do arquivo.
+- **CSP restrita.** Só scripts da própria origem rodam. O protocolo `boladaomedia://` serve apenas arquivos das pastas de cache, só para a janela principal e só com os nomes que o próprio app gera (hash ou UUID), o que recusa `..`, barras e nomes como `C:arquivo`.
 - **Proxy com credencial.** O proxy local só aceita a credencial aleatória da sessão, comparada em tempo constante, e o comando equivalente copiado vem com ela mascarada.
 - **Nomes do Windows.** Nomes reservados (`CON`, `PRN`, `AUX`, `NUL`, `COM1` a `COM9`, `LPT1` a `LPT9`) recebem um prefixo, `--windows-filenames` fica sempre ligado e `--trim-filenames` é calculado pela profundidade da pasta para respeitar o `MAX_PATH`. Arquivos com o mesmo nome seguem a política escolhida: *Manter os dois (2)*, *Substituir* ou *Pular*.
 
@@ -590,7 +593,7 @@ BOLADAO/
 | CPU com 3 downloads limitados a 2 MB/s | 0,21% |
 | GPU com *Reduzir movimento*, Modo Jogo ou janela minimizada | 0%, porque o loop de renderização para |
 | Processos órfãos depois de cancelar ou fechar à força | 0, graças aos Job Objects |
-| `cargo test` | 27 de 27 aprovados |
+| `cargo test` | 32 de 32 aprovados |
 
 <sub>Medições do autor no Windows 10/11 x64, no processo principal (<code>Boladão.exe</code>). O WebView2 roda em processos próprios do Windows, que não entram nesses números.</sub>
 

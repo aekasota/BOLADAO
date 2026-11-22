@@ -516,13 +516,13 @@ where
         if sidecar_img.is_file() {
             let _ = fs::remove_file(&sidecar_img);
         }
-        if current_path != out_final {
-            let _ = fs::remove_file(&current_path);
-        } else {
-            let _ = fs::remove_file(&current_path);
-        }
+        // The processed file takes its place before the original is deleted, so a failed rename
+        // never costs the download.
         fs::rename(&out_tmp, &out_final)
             .map_err(|e| format!("Erro finalizando arquivo de áudio: {e}"))?;
+        if current_path != out_final {
+            let _ = fs::remove_file(&current_path);
+        }
         current_path = out_final;
     }
 
@@ -693,9 +693,11 @@ where
             .await?;
         }
 
-        let _ = fs::remove_file(&current_path);
         fs::rename(&out_tmp, &out_final)
             .map_err(|e| format!("Erro salvando vídeo processado: {e}"))?;
+        if current_path != out_final {
+            let _ = fs::remove_file(&current_path);
+        }
         current_path = out_final;
     }
 

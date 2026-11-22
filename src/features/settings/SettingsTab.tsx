@@ -453,12 +453,6 @@ export const SettingsTab: React.FC = () => {
                   </div>
                 ))}
               </div>
-
-              <Toggle
-                checked={settings.monitor_clipboard_background}
-                onChange={(v) => updateSettings({ monitor_clipboard_background: v })}
-                label="Monitorar área de transferência mesmo em segundo plano (desligado por padrão)"
-              />
             </>
           )}
 

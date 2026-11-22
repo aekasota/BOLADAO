@@ -1,6 +1,6 @@
 [package]
 name = "boladao"
-version = "1.1.0"
+version = "1.1.1"
 description = "Boladão — Downloader desktop com yt-dlp, Deno e FFmpeg embutidos"
 authors = ["hyak"]
 edition = "2021"

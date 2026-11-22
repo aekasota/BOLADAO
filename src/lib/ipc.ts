@@ -333,7 +333,6 @@ export interface AppSettings {
   light_limit_bps: number;
   peak_7d_bps: number;
   speed_unit: SpeedUnit;
-  monitor_clipboard_background: boolean;
   tray_notice_shown: boolean;
   game_mode_auto: boolean;
   game_mode_override: GameModeOverride;
@@ -847,7 +846,6 @@ export function fallbackSettings(): AppSettings {
     light_limit_bps: 2 * 1024 * 1024,
     peak_7d_bps: 0,
     speed_unit: "bytes_per_sec",
-    monitor_clipboard_background: false,
     tray_notice_shown: false,
     game_mode_auto: true,
     game_mode_override: "auto",

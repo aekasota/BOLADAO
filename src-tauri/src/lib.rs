@@ -5,6 +5,7 @@ pub mod cookies;
 pub mod errors;
 pub mod gamemode;
 pub mod installer;
+pub mod instance;
 pub mod ipc;
 pub mod job;
 pub mod library;
@@ -115,6 +116,14 @@ pub fn run() {
         return;
     }
 
+    // One Boladão per session: a second launch only brings the open window forward, before it
+    // touches the queue database or applies an update.
+    instance::wait_for_previous_process();
+    let Some(single_instance) = instance::acquire() else {
+        eprintln!("[boladao] O Boladão já está aberto; a janela dele foi trazida para a frente.");
+        return;
+    };
+
     // An update downloaded and verified in the previous session is installed before anything opens.
     updater::cleanup_previous_binary();
     match updater::apply_pending(true) {
@@ -185,18 +194,24 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         // Custom CSP-strict local media protocol (`http://boladaomedia.localhost/{thumb|wave|spec}/<file>`)
-        .register_uri_scheme_protocol("boladaomedia", |_ctx, request| {
+        .register_uri_scheme_protocol("boladaomedia", |ctx, request| {
+            // Tauri serves custom protocols to every webview, including the login windows, which
+            // load the platforms' own pages and their third-party scripts. Only the app reads media.
+            if ctx.webview_label() != "main" {
+                return Response::builder()
+                    .status(StatusCode::FORBIDDEN)
+                    .body(Vec::new())
+                    .unwrap();
+            }
+
             let path = request.uri().path().trim_start_matches('/');
             let mut parts = path.splitn(2, '/');
             let kind = parts.next().unwrap_or("");
             let fname = parts.next().unwrap_or("");
 
-            // Block any path traversal
-            if fname.is_empty()
-                || fname.contains("..")
-                || fname.contains('/')
-                || fname.contains('\\')
-            {
+            // Only names the app generates itself, which also rules out traversal (`..`, `/`, `\`)
+            // and drive-relative names such as `C:arquivo`.
+            if !is_media_cache_name(fname) {
                 return Response::builder()
                     .status(StatusCode::BAD_REQUEST)
                     .body(Vec::new())
@@ -256,6 +271,9 @@ pub fn run() {
             queue.bind_app_handle(handle.clone());
 
             setup_system_tray(&handle)?;
+
+            let handle_instance = handle.clone();
+            single_instance.listen(move || show_main_window(&handle_instance));
 
             // Background 1: Extract embedded binaries on first boot + probe FFmpeg capabilities + weekly silent yt-dlp check
             let bins_boot = bins.clone();
@@ -464,6 +482,26 @@ pub fn run() {
         .expect("Erro executando aplicação Tauri");
 }
 
+/// Cached media names as the app generates them: a SHA-256 hex or a UUID, plus `.img` or `.png`.
+fn is_media_cache_name(name: &str) -> bool {
+    let Some((stem, ext)) = name.rsplit_once('.') else {
+        return false;
+    };
+    matches!(ext, "img" | "png")
+        && !stem.is_empty()
+        && stem.len() <= 64
+        && stem.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
+}
+
+/// Brings the main window back from the tray (or from minimized) and gives it focus.
+fn show_main_window(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
 fn setup_system_tray(app: &AppHandle) -> tauri::Result<()> {
     let show_i = MenuItem::with_id(app, "show", "Abrir Boladão", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
@@ -492,12 +530,7 @@ fn setup_system_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| {
             let state = app.state::<AppState>();
             match event.id.as_ref() {
-                "show" => {
-                    if let Some(w) = app.get_webview_window("main") {
-                        let _ = w.show();
-                        let _ = w.set_focus();
-                    }
-                }
+                "show" => show_main_window(app),
                 "pause_all" => state.queue.pause_all(),
                 "resume_all" => state.queue.resume_all(),
                 "bw_unlimited" => {
@@ -520,10 +553,10 @@ fn setup_system_tray(app: &AppHandle) -> tauri::Result<()> {
                     let _ = fs::create_dir_all(&root);
                     let _ = reveal_in_explorer(&root);
                 }
-                "quit" => {
-                    state.queue.pause_all();
-                    app.exit(0);
-                }
+                // Nothing is paused on the way out: the Job Objects stop the running processes, and
+                // on the next start active items go back to the queue and resume their `.part`
+                // files, while queued ones simply stay queued.
+                "quit" => app.exit(0),
                 _ => {}
             }
         })
@@ -534,10 +567,7 @@ fn setup_system_tray(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                if let Some(w) = tray.app_handle().get_webview_window("main") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                }
+                show_main_window(tray.app_handle());
             }
         });
 
@@ -547,4 +577,32 @@ fn setup_system_tray(app: &AppHandle) -> tauri::Result<()> {
 
     builder.build(app)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_media_cache_name;
+
+    #[test]
+    fn media_protocol_serves_only_names_the_app_generates() {
+        assert!(is_media_cache_name(&format!("{}.img", "a1".repeat(32))));
+        assert!(is_media_cache_name("0f8fad5b-d9cb-469f-a165-70867728950e.png"));
+
+        let too_long = format!("{}.img", "a".repeat(65));
+        for bad in [
+            "",
+            ".png",
+            "C:segredo.png",
+            "D:a.png",
+            "..\\settings.json",
+            "a/b.png",
+            "%2e%2e.png",
+            "abc.exe",
+            "abc.png:fluxo",
+            "abc",
+            too_long.as_str(),
+        ] {
+            assert!(!is_media_cache_name(bad), "{bad:?} não pode ser servido");
+        }
+    }
 }

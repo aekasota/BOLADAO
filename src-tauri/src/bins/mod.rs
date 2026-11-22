@@ -831,9 +831,8 @@ fn extract_tar_zst_atomic(
 fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
     let tmp = path.with_extension(format!("tmp-{}", std::process::id()));
     fs::write(&tmp, content).map_err(|e| format!("Erro escrevendo {}: {e}", tmp.display()))?;
-    if path.exists() {
-        let _ = fs::remove_file(path);
-    }
+    // `fs::rename` replaces the old file in one step; deleting it first would open a window in
+    // which a crash leaves no file at all.
     fs::rename(&tmp, path).map_err(|e| format!("Erro movendo {}: {e}", path.display()))
 }
 
