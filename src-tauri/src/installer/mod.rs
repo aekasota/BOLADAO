@@ -530,6 +530,34 @@ fn register_windows_uninstaller(install_dir: &Path, target_exe: &Path) -> Result
     }
 }
 
+/// Keeps "Aplicativos instalados" showing the running version: a self-update swaps the executable
+/// without going through the installer, so the registered `DisplayVersion` would stay behind.
+pub fn sync_registered_version() {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::System::Registry::{
+            RegCloseKey, RegOpenKeyExW, HKEY, HKEY_CURRENT_USER, KEY_SET_VALUE,
+        };
+        let Some(dir) = read_registered_install_dir() else {
+            return;
+        };
+        let runs_from_install_dir = env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|p| p.to_string_lossy().to_lowercase()))
+            .map(|parent| parent == dir.to_string_lossy().trim_end_matches('\\').to_lowercase())
+            .unwrap_or(false);
+        if !runs_from_install_dir {
+            return;
+        }
+        let subkey = wide_null("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Boladão");
+        let mut hkey: HKEY = std::ptr::null_mut();
+        if RegOpenKeyExW(HKEY_CURRENT_USER, subkey.as_ptr(), 0, KEY_SET_VALUE, &mut hkey) == 0 {
+            set_reg_sz(hkey, "DisplayVersion", env!("CARGO_PKG_VERSION"));
+            let _ = RegCloseKey(hkey);
+        }
+    }
+}
+
 fn read_registered_install_dir() -> Option<PathBuf> {
     #[cfg(windows)]
     unsafe {

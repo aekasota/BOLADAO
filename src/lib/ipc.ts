@@ -38,7 +38,7 @@ export type ReencodeQuality = "high" | "medium" | "small";
 export type CollisionPolicy = "keep_both" | "overwrite" | "skip";
 export type BandwidthProfile = "unlimited" | "balanced" | "light" | "custom";
 export type GameModeOverride = "auto" | "force_on" | "force_off";
-export type ThemeId = "sangue" | "papel" | "acido" | "cobalto";
+export type ThemeId = "sangue" | "papel" | "acido" | "cobalto" | "breu";
 export type SpeedUnit = "bytes_per_sec" | "bits_per_sec";
 export type ProbeScope = "single_video" | "full_playlist";
 
@@ -398,6 +398,11 @@ export interface LimiterStatsPayload {
   game_mode_override_active: boolean;
 }
 
+export interface AppUpdateInfo {
+  version: string;
+  notes: string | null;
+}
+
 export interface GameModeStatus {
   active: boolean;
   override_mode: GameModeOverride;
@@ -547,6 +552,17 @@ export const api = {
 
   rollbackYtdlp: (): Promise<string> =>
     isTauriRuntime() ? invoke("rollback_ytdlp") : Promise.resolve("2026.10.26"),
+
+  getPendingUpdate: (): Promise<AppUpdateInfo | null> =>
+    isTauriRuntime() ? invoke("get_pending_update") : Promise.resolve(null),
+
+  applyUpdateNow: (): Promise<void> => invoke("apply_update_now"),
+
+  openAuthorProfile: (): Promise<void> => {
+    if (isTauriRuntime()) return invoke("open_author_profile");
+    window.open("https://github.com/aekasota", "_blank", "noopener");
+    return Promise.resolve();
+  },
 
   classifyUrl: (url: string): Promise<Classification> =>
     isTauriRuntime() ? invoke("classify_url_cmd", { url }) : localClassifyFallback(url),

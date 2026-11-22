@@ -92,6 +92,26 @@
   --stripe-bg: #0D0F1A;
 }
 
+/* Breu: preto absoluto. Relevo Op-Art em grafite e interface monocromática em creme. */
+[data-theme="breu"] {
+  --op-a: #000000;
+  --op-b: #1A1A1A;
+  --bg: #000000;
+  --surface-1: #0A0A0A;
+  --surface-2: #141414;
+  --line: #262626;
+  --text: #F2EEE6;
+  --text-2: #A8A39C;
+  --text-3: #948F89;
+  --accent: #F2EEE6;
+  --accent-text: #F2EEE6;
+  --on-accent: #000000;
+  --warn: #FFB547;
+  --ok: #3DDC84;
+  --stripe-fg: #F2EEE6;
+  --stripe-bg: #000000;
+}
+
 :root {
   --font-sans: "Archivo", "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", Consolas, monospace;

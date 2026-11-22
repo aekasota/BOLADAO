@@ -19,6 +19,7 @@ pub enum ThemeId {
     Papel,
     Acido,
     Cobalto,
+    Breu,
 }
 
 impl Default for ThemeId {
@@ -247,8 +248,9 @@ mod wcag_tests {
         warn: &'static str,
     }
 
-    /// Verifies Section 13.2 & Section 18.1: ALL text/background pairs across ALL 4 themes
-    /// (`Sangue`, `Papel`, `Ácido`, `Cobalto`) achieve WCAG AA contrast >= 4.5:1!
+    /// Verifies Section 13.2 & Section 18.1: ALL text/background pairs across ALL 5 themes
+    /// (`Sangue`, `Papel`, `Ácido`, `Cobalto`, `Breu`) achieve WCAG AA contrast >= 4.5:1.
+    /// This table mirrors `src/theme/tokens.css` by hand: update both when a theme changes.
     #[test]
     fn all_themes_satisfy_wcag_aa_4_5_contrast() {
         let themes = [
@@ -302,6 +304,19 @@ mod wcag_tests {
                 accent_btn: "#5B78FF",
                 on_accent: "#0B0D16",
                 accent_text: "#7B93FF",
+                warn: "#FFB547",
+            },
+            ThemePalette {
+                name: "Breu",
+                bg: "#000000",
+                surface_1: "#0A0A0A",
+                surface_2: "#141414",
+                text: "#F2EEE6",
+                text_2: "#A8A39C",
+                text_3: "#948F89",
+                accent_btn: "#F2EEE6",
+                on_accent: "#000000",
+                accent_text: "#F2EEE6",
                 warn: "#FFB547",
             },
         ];

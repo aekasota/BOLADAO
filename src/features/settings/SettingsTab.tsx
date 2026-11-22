@@ -609,6 +609,11 @@ export const SettingsTab: React.FC = () => {
                 </div>
               </div>
 
+              <div style={{ fontSize: 12.5, color: "var(--text-2)" }}>
+                Cookies funcionam como senha. O Boladão guarda os seus criptografados pelo Windows (DPAPI),
+                presos à sua conta de usuário, e só os decifra num arquivo temporário enquanto o yt-dlp roda.
+              </div>
+
               {accountMsg && (
                 <div style={{ fontSize: 12.5, color: "var(--accent-text)" }}>{accountMsg}</div>
               )}
@@ -681,7 +686,9 @@ export const SettingsTab: React.FC = () => {
                                 if (typeof f === "string") {
                                   await api.importCookiesFile("youtube", f);
                                   await loadSettings();
-                                  setAccountMsg("Arquivo cookies.txt importado.");
+                                  setAccountMsg(
+                                    "cookies.txt importado e criptografado. Você já pode apagar o arquivo original."
+                                  );
                                 }
                               }}
                             >
@@ -807,13 +814,14 @@ export const SettingsTab: React.FC = () => {
                 Aparência
               </h2>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
                 {(
                   [
                     { id: "sangue", name: "Sangue", swA: "#FA023E", swB: "#161616" },
                     { id: "papel", name: "Papel", swA: "#161616", swB: "#F2EEE6" },
                     { id: "acido", name: "Ácido", swA: "#C6FF00", swB: "#121212" },
                     { id: "cobalto", name: "Cobalto", swA: "#2B4BFF", swB: "#0D0F1A" },
+                    { id: "breu", name: "Breu", swA: "#000000", swB: "#1A1A1A" },
                   ] as { id: ThemeId; name: string; swA: string; swB: string }[]
                 ).map((th) => {
                   const selected = settings.theme === th.id;

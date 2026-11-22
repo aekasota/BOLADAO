@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -48,31 +49,240 @@ pub fn webview_profiles_dir() -> PathBuf {
     dir
 }
 
-pub fn cookie_file_path(platform_id: &str) -> PathBuf {
-    cookies_dir().join(format!("{platform_id}.txt"))
-}
+// Session cookies work like passwords. They are stored as `<platform>.cookies`, encrypted with the
+// Windows Data Protection API (DPAPI, bound to the current Windows user), so a copied folder or a
+// backup of it is useless elsewhere. yt-dlp only reads plaintext Netscape files, so a copy lives in
+// `cookies\run\` strictly while a yt-dlp process runs (see `CookieLease`).
+const DPAPI_ENTROPY: &[u8] = b"Boladao/cookies/v1";
 
-pub fn resolve_cookie_source(
-    platform_id: &str,
-    accounts: &BTreeMap<String, ConnectedAccount>,
-) -> CookieSource {
-    let key = if platform_id == "youtube_music" {
+fn account_key(platform_id: &str) -> &str {
+    if platform_id == "youtube_music" {
         "youtube"
     } else {
         platform_id
+    }
+}
+
+fn store_file(dir: &Path, key: &str) -> PathBuf {
+    dir.join(format!("{key}.cookies"))
+}
+
+/// Plaintext file written by v1.0.0, migrated to the encrypted store on startup or first use.
+fn legacy_file(dir: &Path, key: &str) -> PathBuf {
+    dir.join(format!("{key}.txt"))
+}
+
+fn run_dir(dir: &Path) -> PathBuf {
+    dir.join("run")
+}
+
+fn save_store_in(dir: &Path, key: &str, plaintext: &str) -> Result<(), String> {
+    let blob = dpapi_protect(plaintext.as_bytes())?;
+    fs::create_dir_all(dir).map_err(|e| format!("Erro criando a pasta de cookies: {e}"))?;
+    let tmp = dir.join(format!("{key}.{}.tmp", Uuid::new_v4().simple()));
+    fs::write(&tmp, blob).map_err(|e| format!("Erro salvando cookies: {e}"))?;
+    fs::rename(&tmp, store_file(dir, key)).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        format!("Erro salvando cookies: {e}")
+    })?;
+    let _ = fs::remove_file(legacy_file(dir, key));
+    Ok(())
+}
+
+fn load_store_in(dir: &Path, key: &str) -> Option<String> {
+    if let Ok(blob) = fs::read(store_file(dir, key)) {
+        return dpapi_unprotect(&blob).ok().and_then(|plain| String::from_utf8(plain).ok());
+    }
+    let legacy = fs::read_to_string(legacy_file(dir, key)).ok()?;
+    let _ = save_store_in(dir, key, &legacy);
+    Some(legacy)
+}
+
+fn migrate_legacy_in(dir: &Path) {
+    // Plaintext copies only exist while yt-dlp runs; leftovers mean the app was killed mid-run.
+    let _ = fs::remove_dir_all(run_dir(dir));
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
     };
-    if let Some(acc) = accounts.get(key) {
-        match acc.auth_kind {
-            AccountAuthKind::FirefoxBrowser => return CookieSource::FirefoxBrowser,
-            AccountAuthKind::EmbeddedCookies | AccountAuthKind::ImportedCookiesFile => {
-                let p = cookie_file_path(key);
-                if p.is_file() {
-                    return CookieSource::File(p);
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().map(|ext| ext == "txt").unwrap_or(false) {
+            let key = path.file_stem().and_then(|s| s.to_str()).map(str::to_string);
+            if let (Some(key), Ok(raw)) = (key, fs::read_to_string(&path)) {
+                if save_store_in(dir, &key, &raw).is_ok() {
+                    let _ = fs::remove_file(&path);
                 }
             }
         }
     }
-    CookieSource::None
+}
+
+/// Encrypts cookie files left in plaintext by v1.0.0 and removes stray plaintext copies.
+pub fn secure_cookie_store() {
+    migrate_legacy_in(&cookies_dir());
+}
+
+/// Plaintext cookie file handed to yt-dlp for a single run. Keep it alive until the process exits:
+/// dropping it encrypts the cookies yt-dlp refreshed back into the store and deletes the copy.
+pub struct CookieLease {
+    dir: PathBuf,
+    key: String,
+    path: PathBuf,
+    original: String,
+}
+
+impl CookieLease {
+    fn open_in(dir: &Path, key: &str) -> Option<Self> {
+        let plaintext = load_store_in(dir, key)?;
+        let run = run_dir(dir);
+        fs::create_dir_all(&run).ok()?;
+        let path = run.join(format!("{key}-{}.txt", Uuid::new_v4().simple()));
+        fs::write(&path, &plaintext).ok()?;
+        Some(Self {
+            dir: dir.to_path_buf(),
+            key: key.to_string(),
+            path,
+            original: plaintext,
+        })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for CookieLease {
+    fn drop(&mut self) {
+        // yt-dlp dumps its cookie jar back into this file on exit. A run killed mid-write can leave
+        // a truncated file, so only a file that still holds cookies replaces the stored ones.
+        if let Ok(updated) = fs::read_to_string(&self.path) {
+            if updated != self.original && netscape_cookie_stats(&updated).0 > 0 {
+                let _ = save_store_in(&self.dir, &self.key, &updated);
+            }
+        }
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+/// Decides how yt-dlp receives cookies for a platform. When a file is needed, the returned lease
+/// must outlive the yt-dlp process that reads it.
+pub fn prepare_cookie_source(
+    platform_id: &str,
+    accounts: &BTreeMap<String, ConnectedAccount>,
+) -> (CookieSource, Option<CookieLease>) {
+    let key = account_key(platform_id);
+    match accounts.get(key).map(|acc| acc.auth_kind) {
+        Some(AccountAuthKind::FirefoxBrowser) => (CookieSource::FirefoxBrowser, None),
+        Some(AccountAuthKind::EmbeddedCookies | AccountAuthKind::ImportedCookiesFile) => {
+            match CookieLease::open_in(&cookies_dir(), key) {
+                Some(lease) => (CookieSource::File(lease.path().to_path_buf()), Some(lease)),
+                None => (CookieSource::None, None),
+            }
+        }
+        None => (CookieSource::None, None),
+    }
+}
+
+/// Counts valid Netscape cookie lines and finds the earliest expiry among them.
+pub fn netscape_cookie_stats(raw: &str) -> (usize, Option<i64>) {
+    let mut count = 0usize;
+    let mut earliest: Option<i64> = None;
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || (trimmed.starts_with('#') && !trimmed.starts_with("#HttpOnly_")) {
+            continue;
+        }
+        let cols: Vec<&str> = trimmed.split('\t').collect();
+        if cols.len() >= 7 {
+            count += 1;
+            if let Ok(exp) = cols[4].parse::<i64>() {
+                if exp > 0 {
+                    earliest = Some(earliest.map_or(exp, |prev| prev.min(exp)));
+                }
+            }
+        }
+    }
+    (count, earliest)
+}
+
+#[cfg(windows)]
+fn dpapi_protect(plain: &[u8]) -> Result<Vec<u8>, String> {
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{
+        CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+    };
+    unsafe {
+        let input = CRYPT_INTEGER_BLOB { cbData: plain.len() as u32, pbData: plain.as_ptr() as *mut u8 };
+        let entropy = CRYPT_INTEGER_BLOB {
+            cbData: DPAPI_ENTROPY.len() as u32,
+            pbData: DPAPI_ENTROPY.as_ptr() as *mut u8,
+        };
+        let mut out = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+        let ok = CryptProtectData(
+            &input,
+            std::ptr::null(),
+            &entropy,
+            std::ptr::null(),
+            std::ptr::null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut out,
+        );
+        if ok == 0 {
+            return Err(format!(
+                "O Windows não conseguiu criptografar os cookies: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let blob = std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec();
+        LocalFree(out.pbData as _);
+        Ok(blob)
+    }
+}
+
+#[cfg(windows)]
+fn dpapi_unprotect(blob: &[u8]) -> Result<Vec<u8>, String> {
+    use windows_sys::Win32::Foundation::LocalFree;
+    use windows_sys::Win32::Security::Cryptography::{
+        CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+    };
+    unsafe {
+        let input = CRYPT_INTEGER_BLOB { cbData: blob.len() as u32, pbData: blob.as_ptr() as *mut u8 };
+        let entropy = CRYPT_INTEGER_BLOB {
+            cbData: DPAPI_ENTROPY.len() as u32,
+            pbData: DPAPI_ENTROPY.as_ptr() as *mut u8,
+        };
+        let mut out = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+        let ok = CryptUnprotectData(
+            &input,
+            std::ptr::null_mut(),
+            &entropy,
+            std::ptr::null(),
+            std::ptr::null(),
+            CRYPTPROTECT_UI_FORBIDDEN,
+            &mut out,
+        );
+        if ok == 0 {
+            return Err(format!(
+                "O Windows não conseguiu abrir os cookies salvos: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let plain = std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec();
+        // Wipe the plaintext the OS handed back before releasing it.
+        std::ptr::write_bytes(out.pbData, 0, out.cbData as usize);
+        LocalFree(out.pbData as _);
+        Ok(plain)
+    }
+}
+
+#[cfg(not(windows))]
+fn dpapi_protect(plain: &[u8]) -> Result<Vec<u8>, String> {
+    Ok(plain.to_vec())
+}
+
+#[cfg(not(windows))]
+fn dpapi_unprotect(blob: &[u8]) -> Result<Vec<u8>, String> {
+    Ok(blob.to_vec())
 }
 
 /// Formats cookies strictly following the Netscape `cookies.txt` specification expected by `yt-dlp`.
@@ -251,8 +461,7 @@ pub fn harvest_login_window_cookies(
     }
 
     let formatted = format_netscape_cookies_txt(&entries);
-    let dest = cookie_file_path(key);
-    fs::write(&dest, formatted).map_err(|e| format!("Erro salvando cookies: {e}"))?;
+    save_store_in(&cookies_dir(), key, &formatted)?;
     let _ = win.close();
 
     Ok(ConnectedAccount {
@@ -274,29 +483,12 @@ pub fn import_cookies_txt_file(platform_id: &str, src_path: &Path) -> Result<Con
     let raw = fs::read_to_string(src_path)
         .map_err(|e| format!("Não foi possível ler o arquivo de cookies: {e}"))?;
 
-    let mut count = 0usize;
-    let mut earliest_exp: Option<i64> = None;
-    for line in raw.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || (trimmed.starts_with('#') && !trimmed.starts_with("#HttpOnly_")) {
-            continue;
-        }
-        let cols: Vec<&str> = trimmed.split('\t').collect();
-        if cols.len() >= 7 {
-            count += 1;
-            if let Ok(exp) = cols[4].parse::<i64>() {
-                if exp > 0 {
-                    earliest_exp = Some(earliest_exp.map_or(exp, |p| p.min(exp)));
-                }
-            }
-        }
-    }
+    let (count, earliest_exp) = netscape_cookie_stats(&raw);
     if count == 0 {
         return Err("Esse arquivo não parece ser um cookies.txt no formato Netscape.".to_string());
     }
 
-    let dest = cookie_file_path(key);
-    fs::write(&dest, &raw).map_err(|e| format!("Erro copiando cookies.txt: {e}"))?;
+    save_store_in(&cookies_dir(), key, &raw)?;
 
     Ok(ConnectedAccount {
         platform_id: key.to_string(),
@@ -318,7 +510,9 @@ pub fn logout_account(app: Option<&AppHandle>, platform_id: &str) {
             let _ = win.close();
         }
     }
-    let _ = fs::remove_file(cookie_file_path(key));
+    let dir = cookies_dir();
+    let _ = fs::remove_file(store_file(&dir, key));
+    let _ = fs::remove_file(legacy_file(&dir, key));
     let _ = fs::remove_dir_all(webview_profiles_dir().join(key));
 }
 
@@ -362,5 +556,50 @@ mod tests {
             lines[5],
             "instagram.com\tFALSE\t/accounts\tFALSE\t0\tcsrftoken\txyzclean"
         );
+    }
+
+    const SAMPLE: &str = "# Netscape HTTP Cookie File\n.instagram.com\tTRUE\t/\tTRUE\t1893456000\tsessionid\tSEGREDO-DA-SESSAO\n";
+
+    #[cfg(windows)]
+    #[test]
+    fn cookies_are_encrypted_at_rest_and_migrated_from_plaintext() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(legacy_file(dir.path(), "instagram"), SAMPLE).unwrap();
+        fs::create_dir_all(run_dir(dir.path())).unwrap();
+        fs::write(run_dir(dir.path()).join("sobra.txt"), SAMPLE).unwrap();
+
+        migrate_legacy_in(dir.path());
+
+        assert!(!legacy_file(dir.path(), "instagram").exists(), "o .txt em texto puro precisa sumir");
+        assert!(!run_dir(dir.path()).exists(), "cópias de execução antigas precisam sumir");
+        let blob = fs::read(store_file(dir.path(), "instagram")).unwrap();
+        assert!(
+            !String::from_utf8_lossy(&blob).contains("SEGREDO-DA-SESSAO"),
+            "o cookie não pode aparecer no arquivo guardado"
+        );
+        assert_eq!(load_store_in(dir.path(), "instagram").as_deref(), Some(SAMPLE));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn lease_keeps_refreshed_cookies_and_deletes_the_plaintext_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        save_store_in(dir.path(), "youtube", SAMPLE).unwrap();
+
+        // yt-dlp refreshed the session: the new jar replaces the stored one.
+        let refreshed = format!("{SAMPLE}.youtube.com\tTRUE\t/\tTRUE\t1893456000\tPSIDTS\tnovo\n");
+        let lease = CookieLease::open_in(dir.path(), "youtube").unwrap();
+        let copy = lease.path().to_path_buf();
+        assert_eq!(fs::read_to_string(&copy).unwrap(), SAMPLE);
+        fs::write(&copy, &refreshed).unwrap();
+        drop(lease);
+        assert!(!copy.exists(), "a cópia em texto puro só existe enquanto o yt-dlp roda");
+        assert_eq!(load_store_in(dir.path(), "youtube").as_deref(), Some(refreshed.as_str()));
+
+        // A run killed mid-write leaves a truncated file: the stored cookies must survive.
+        let lease = CookieLease::open_in(dir.path(), "youtube").unwrap();
+        fs::write(lease.path(), "").unwrap();
+        drop(lease);
+        assert_eq!(load_store_in(dir.path(), "youtube").as_deref(), Some(refreshed.as_str()));
     }
 }

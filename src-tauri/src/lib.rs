@@ -14,6 +14,7 @@ pub mod probe;
 pub mod queue;
 pub mod settings;
 pub mod spec;
+pub mod updater;
 pub mod winproc;
 pub mod workshop;
 
@@ -23,7 +24,7 @@ use crate::installer::{detect_launch_mode, ensure_webview2_or_bootstrap, LaunchM
 use crate::ipc::AppState;
 use crate::library::{spectrograms_cache_dir, waveforms_cache_dir, LibraryStore};
 use crate::limiter::{BandwidthLimiter, BandwidthProfile};
-use crate::paths::{cleanup_stale_temp_dirs, reveal_in_explorer, APP_NAME};
+use crate::paths::{reveal_in_explorer, APP_NAME};
 use crate::probe::{thumbs_cache_dir, ProbeService};
 use crate::queue::QueueManager;
 use crate::settings::{load_or_init_settings, save_settings_to_disk};
@@ -114,6 +115,15 @@ pub fn run() {
         return;
     }
 
+    // An update downloaded and verified in the previous session is installed before anything opens.
+    updater::cleanup_previous_binary();
+    match updater::apply_pending(true) {
+        Ok(true) => return,
+        Ok(false) => {}
+        Err(e) => eprintln!("[boladao] Atualização não aplicada: {e}"),
+    }
+    installer::sync_registered_version();
+
     if !ensure_webview2_or_bootstrap() {
         winproc::show_missing_webview2_dialog();
         return;
@@ -124,8 +134,10 @@ pub fn run() {
         let cfg = settings.read();
         let _ = fs::create_dir_all(&cfg.music_root);
         let _ = fs::create_dir_all(&cfg.video_root);
-        cleanup_stale_temp_dirs(&[cfg.music_root.clone(), cfg.video_root.clone()]);
+        // `.boladao-tmp` is cleaned by `QueueManager::open_default`, after the queue is loaded,
+        // so partial downloads of interrupted jobs survive a restart.
     }
+    cookies::secure_cookie_store();
 
     let bins = BinManager::new();
     let probe = Arc::new(ProbeService::new());
@@ -290,6 +302,29 @@ pub fn run() {
                 }
             });
 
+            // Background 2b: Boladão self-update through GitHub Releases (shortly after start, then every 6 h)
+            let limiter_upd = limiter.clone();
+            let handle_upd = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(20)).await;
+                loop {
+                    match updater::check_and_download(limiter_upd.proxy_url()).await {
+                        Ok(Some(update)) => {
+                            let _ = handle_upd.emit(
+                                "app:update_ready",
+                                ipc::AppUpdateInfo {
+                                    version: update.version,
+                                    notes: update.notes,
+                                },
+                            );
+                        }
+                        Ok(None) => {}
+                        Err(e) => eprintln!("[boladao] Verificação de atualização: {e}"),
+                    }
+                    tokio::time::sleep(Duration::from_secs(6 * 60 * 60)).await;
+                }
+            });
+
             // Background 3: Game Mode automatic detector every 2s (Section 11.4)
             let gm_bg = gamemode.clone();
             let limiter_gm = limiter.clone();
@@ -377,6 +412,9 @@ pub fn run() {
             ipc::check_ytdlp_update,
             ipc::update_ytdlp,
             ipc::rollback_ytdlp,
+            ipc::get_pending_update,
+            ipc::apply_update_now,
+            ipc::open_author_profile,
             ipc::classify_url_cmd,
             ipc::extract_urls_cmd,
             ipc::probe,

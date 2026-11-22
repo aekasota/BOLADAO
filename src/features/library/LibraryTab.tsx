@@ -279,10 +279,21 @@ export const LibraryTab: React.FC = () => {
                           padding: "2px 6px",
                         }}
                       >
-                        <img
-                          src={entry.waveform_url}
-                          alt="Forma de onda do áudio"
-                          style={{ width: "100%", height: "100%", objectFit: "fill" }}
+                        {/* The PNG is used only as an alpha mask so the waveform follows the theme accent. */}
+                        <div
+                          role="img"
+                          aria-label="Forma de onda do áudio"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            background: "var(--accent)",
+                            WebkitMaskImage: `url("${entry.waveform_url}")`,
+                            maskImage: `url("${entry.waveform_url}")`,
+                            WebkitMaskSize: "100% 100%",
+                            maskSize: "100% 100%",
+                            WebkitMaskRepeat: "no-repeat",
+                            maskRepeat: "no-repeat",
+                          }}
                         />
                       </div>
                     )}

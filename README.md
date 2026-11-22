@@ -49,10 +49,10 @@ Baixar vídeo no Windows costuma ter duas saídas ruins: um site cheio de anúnc
 
 O Boladão junta yt-dlp, FFmpeg e Deno em um aplicativo nativo. Você instala, cola um link e escolhe o formato. Tudo roda no seu computador, sem conta, sem anúncio e sem telemetria.
 
-- **Nada para configurar.** yt-dlp `2026.10.26`, Deno `2.9.8` e FFmpeg `9.0.2` vêm comprimidos dentro do executável e são extraídos na primeira abertura.
+- **Nada para configurar.** yt-dlp `2026.10.26`, Deno `2.9.8` e FFmpeg `9.0.2` vêm comprimidos dentro do executável e são extraídos na primeira abertura. O próprio Boladão se atualiza sozinho, com a assinatura de cada versão conferida.
 - **Download que não atrapalha o jogo.** Um limitador de banda único vale para todos os downloads ao mesmo tempo, inclusive HLS e DASH, e o Modo Jogo entra sozinho quando um jogo ocupa a tela.
 - **Oficina FFmpeg.** Normaliza o volume em LUFS, converte para WAV 24-bit, comprime vídeo para caber no Discord ou no WhatsApp, gera GIF e transcreve áudio no próprio PC.
-- **Fila persistente.** Fica salva em SQLite, tenta de novo quando a rede oscila e devolve à fila o que estava baixando se o app fechar no meio.
+- **Fila persistente.** Fica salva em SQLite, tenta de novo quando a rede oscila e, se o app fechar no meio, continua cada download de onde parou.
 - **Biblioteca com análise técnica.** `ffprobe`, loudness, forma de onda e um espectrograma que acusa quando a fonte já tinha perdas.
 - **Transparente.** Avisa sobre DRM antes de tentar, explica cada erro em português com a ação para resolver e mostra o comando `yt-dlp` equivalente de cada download.
 
@@ -85,6 +85,13 @@ A identidade visual vem da Op-Art, a arte óptica dos anos 1960: duas cores chap
       <img src="docs/screenshots/tema-cobalto.png" alt="Tema Cobalto: faixas azul-cobalto e azul-noite" />
       <br />
       <strong>Cobalto</strong> · escuro
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <img src="docs/screenshots/tema-breu.png" width="50%" alt="Tema Breu: relevo grafite sobre preto absoluto, interface em creme" />
+      <br />
+      <strong>Breu</strong> · preto absoluto
     </td>
   </tr>
 </table>
@@ -139,9 +146,9 @@ A interface é toda em português do Brasil, com frases curtas e sem jargão. Qu
 
 O app também avisa quando uma escolha não ajuda. Ao converter para WAV, a tela explica: *"Converter Opus/AAC pra WAV/AIFF não melhora o som. Serve pra abrir em editor ou DAW."*
 
-### Quatro temas
+### Cinco temas
 
-Três temas escuros e um claro. Cada um define o par de cores do fundo e o conjunto completo de tokens da interface (`--bg`, `--surface-1`, `--surface-2`, `--line`, `--text`, `--accent` e outros). A troca é instantânea, e as cores do shader migram em 600 ms.
+Quatro temas escuros e um claro. Cada um define o par de cores do fundo e o conjunto completo de tokens da interface (`--bg`, `--surface-1`, `--surface-2`, `--line`, `--text`, `--accent` e outros). A troca é instantânea, e as cores do shader migram em 600 ms.
 
 | Tema | Cores do fundo | Destaque da interface | Menor contraste |
 |---|---|---|---|
@@ -149,6 +156,7 @@ Três temas escuros e um claro. Cada um define o par de cores do fundo e o conju
 | Papel | `#161616` e `#F2EEE6` | `#C80032` | 4,80:1 |
 | Ácido | `#C6FF00` e `#121212` | `#C6FF00` | 5,48:1 |
 | Cobalto | `#2B4BFF` e `#0D0F1A` | `#5B78FF` | 5,15:1 |
+| Breu | `#000000` e `#1A1A1A` | `#F2EEE6` | 5,75:1 |
 
 Um teste em `cargo test` confere esses números: ele calcula a razão de contraste WCAG 2.1 de 16 combinações por tema (cinco cores de texto sobre três superfícies, mais o botão principal) e falha se alguma ficar abaixo de 4,5:1. É por isso que o Cobalto usa um azul mais claro nos botões: o `#2B4BFF` do fundo não passaria no teste.
 
@@ -215,7 +223,7 @@ A Oficina aplica etapas de FFmpeg logo depois do download ou, mais tarde, a part
 
 ### Fila
 
-A fila fica salva em SQLite. Pausar e retomar continua do ponto em que parou, e se o app fechar ou o PC desligar no meio, o que estava baixando volta para a fila na próxima abertura e recomeça sozinho.
+A fila fica salva em SQLite. Pausar e retomar continua do ponto em que parou, e se o app fechar ou o PC desligar no meio, o que estava baixando volta para a fila na próxima abertura e continua de onde parou: os arquivos parciais em `.boladao-tmp` só são apagados quando nenhum item daquela pasta ainda pode usá-los.
 
 <div align="center">
   <img src="docs/screenshots/fila-ativa.png" width="100%" alt="Fila com três downloads ativos de YouTube, TikTok e Instagram, dois esperando, um concluído e um grupo de playlist" />
@@ -273,7 +281,7 @@ Todo download concluído entra na Biblioteca, com busca por título, canal, arti
 - **Motores à vista:** versões instaladas, encoders de GPU validados, filtros do FFmpeg detectados e busca entre os extratores do yt-dlp (1.629 na versão `2026.10.26`).
 - **Atualização do yt-dlp:** uma vez por semana o app consulta o GitHub em silêncio e avisa quando sai versão nova, no canal *Stable* ou *Nightly*. A atualização baixa `yt-dlp_win.zip`, confere o hash em `SHA2-256SUMS`, troca a versão de forma atômica e guarda a anterior para voltar com um clique.
 - **Diagnóstico:** *Testar motores* roda `yt-dlp -v` e mostra se yt-dlp, Deno e FFmpeg estão se entendendo.
-- **Contas:** para conteúdo privado, restrito por idade ou Stories, o login acontece numa janela WebView2 isolada, com perfil próprio e nenhuma permissão de IPC, para Instagram, TikTok, X, Facebook, Twitch e Vimeo. No YouTube, a recomendação é usar os cookies do Firefox ou importar um `cookies.txt` (formato Netscape); a janela embutida também está disponível.
+- **Contas:** para conteúdo privado, restrito por idade ou Stories, o login acontece numa janela WebView2 isolada, com perfil próprio e nenhuma permissão de IPC, para Instagram, TikTok, X, Facebook, Twitch e Vimeo. No YouTube, a recomendação é usar os cookies do Firefox ou importar um `cookies.txt` (formato Netscape); a janela embutida também está disponível. Os cookies salvos ficam criptografados pela DPAPI do Windows, presos à sua conta de usuário, e só viram texto num arquivo temporário enquanto o yt-dlp roda.
 
 <br />
 
@@ -304,6 +312,8 @@ Se algo falhar, o erro do yt-dlp vira uma mensagem em português com uma ação 
 3. Confira a pasta (o padrão é `%LOCALAPPDATA%\Programs\Boladão`), escolha os atalhos e clique em **Instalar agora**.
 
 O instalador é o próprio Boladão em outro modo. Ele copia o app, cria as pastas `Músicas\Boladão` e `Vídeos\Boladão`, extrai os motores, cria os atalhos marcados e registra o app em *Aplicativos instalados*, com desinstalador próprio. Se o Microsoft Edge WebView2 não estiver presente, ele é instalado em silêncio antes de tudo.
+
+**Atualização automática.** A partir da versão 1.1.0, o Boladão confere a última release do GitHub ao abrir e a cada 6 horas. Quando há versão nova, ele baixa o instalador em segundo plano, pelo limitador de banda (então respeita o Modo Jogo), confere a assinatura digital e mostra um aviso discreto. A atualização entra ao clicar em **Reiniciar agora** ou, sozinha, na próxima vez que o app abrir; downloads em andamento continuam de onde pararam. Quem está na 1.0.0 precisa instalar a 1.1.0 uma vez, à mão.
 
 **Requisitos:** Windows 10 ou 11 de 64 bits e cerca de 500 MB livres (o app mais os motores extraídos).
 
@@ -388,7 +398,7 @@ O Tauri sobe o Vite em `http://localhost:1420` e abre o app com recarga a quente
 # Verificação do TypeScript (tsc) e build de produção do frontend
 npm run build
 
-# 18 testes em Rust
+# 27 testes em Rust
 cd src-tauri
 cargo test
 ```
@@ -400,7 +410,11 @@ Os testes cobrem:
 - progresso monotônico com streams separados e com HLS;
 - sanitização de nomes e de caminhos longos do Windows;
 - formato Netscape de cookies, comparação de versões do yt-dlp e leitura de formatos verticais de Reels e do X;
-- contraste WCAG dos quatro temas;
+- contraste WCAG dos cinco temas;
+- processos reais: o filho nasce dentro do Job Object, roda até o fim depois de retomado e morre quando o Job fecha;
+- cookies: criptografia DPAPI de verdade, migração dos `.txt` antigos e devolução dos cookies renovados pelo yt-dlp;
+- retomada: quais pastas temporárias podem ser limpas e a remoção restrita aos arquivos do item cancelado;
+- atualização: comparação de versões, recusa de arquivo adulterado e troca do executável só com assinatura válida;
 - o limitador de verdade: 20 MB a 2 MB/s em 10 s (±10%) e troca de limite no meio da transferência em menos de 1 s. Só esse teste leva uns 12 s.
 
 ### 6. Gerar o instalador
@@ -412,9 +426,25 @@ npm run build:installer
 | Arquivo gerado | O que é |
 |---|---|
 | `instalador\Boladao-Instalador.exe` | O instalador: o mesmo binário com o marcador `BOLADAO_INSTALL!` (16 bytes) no fim |
+| `instalador\latest.json` | Versão, link e assinatura do instalador, lidos pela atualização automática |
 | `dist\Boladao.exe` | O app avulso, que abre direto, sem instalar |
 
-O script baixa os motores e roda `npm install` se faltar algo, compila com `tauri build --no-bundle` no perfil release (`lto = "fat"`, `codegen-units = 1`, `opt-level = 3`, `strip = true`, `panic = "abort"`) e grava os dois arquivos. Para gerar só o executável avulso, use `scripts/build-release.ps1`.
+O script baixa os motores e roda `npm install` se faltar algo, compila com `tauri build --no-bundle` no perfil release (`lto = "fat"`, `codegen-units = 1`, `opt-level = 3`, `strip = true`, `panic = "abort"`) e grava os arquivos. Se encontrar a chave privada de atualização (padrão `%USERPROFILE%\.boladao\updater.key`, ou o caminho em `BOLADAO_UPDATER_KEY`), assina o instalador com `tauri signer sign` e gera o `latest.json`; sem a chave, o instalador sai normal, mas não serve como atualização. Para gerar só o executável avulso, use `scripts/build-release.ps1`.
+
+### Publicar uma versão
+
+1. Suba a versão em `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`.
+2. Rode `npm run build:installer`.
+3. Crie a release com a tag `v<versão>` e anexe o instalador e o `latest.json`:
+
+```powershell
+gh release create v1.1.0 instalador/Boladao-Instalador.exe instalador/latest.json --title "Boladão v1.1.0" --notes-file notas.md
+```
+
+Os apps instalados leem `releases/latest/download/latest.json`, então só a release mais recente (fora de rascunho e pré-release) é oferecida.
+
+> [!WARNING]
+> A chave privada de atualização fica fora do repositório e não pode se perder: os apps instalados só aceitam atualizações assinadas por ela. Faça um backup de `%USERPROFILE%\.boladao\updater.key` em lugar seguro. Se ela vazar ou sumir, a troca de chave exige uma versão instalada à mão.
 
 ### Atualizar os motores embutidos
 
@@ -473,7 +503,9 @@ Os motores viajam dentro do binário. O `build.rs` comprime cada componente em u
 
 - **Sem shell no caminho da mídia.** yt-dlp, FFmpeg, FFprobe e Deno são iniciados direto com `Command::new` e uma lista de `OsString`, com `--` antes da URL e a flag `CREATE_NO_WINDOW`. Só links `http://` e `https://` passam.
 - **Flags perigosas bloqueadas.** Argumentos extras do usuário passam por `validate_extra_args`, que recusa `--exec`, `-o`/`--output`, `-P`/`--paths`, `--proxy`, `--ffmpeg-location`, `--js-runtimes`, `--netrc`, `--netrc-cmd`, `--netrc-location`, `-a`/`--batch-file`, `--config-locations`, `--load-info-json`, `--plugin-dirs`, `--print-to-file` e as variantes de `--write-*-link`.
-- **Nenhum processo órfão.** Cada download roda num Job Object com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`: cancelar, pausar ou fechar o app encerra a árvore inteira de processos.
+- **Nenhum processo órfão.** Cada download roda num Job Object com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`: cancelar, pausar ou fechar o app encerra a árvore inteira de processos. O processo nasce suspenso e só é retomado depois de entrar no Job Object, então nem ele nem os processos que ele abre rodam fora do grupo. Se a associação falhar, o processo é encerrado e o download falha com erro, em vez de seguir solto.
+- **Cookies criptografados.** Cookies de sessão valem como senha, então ficam guardados com a DPAPI do Windows, presos à sua conta de usuário. A cópia em texto que o yt-dlp exige existe só enquanto ele roda; os cookies que ele renova voltam criptografados, e cópias esquecidas por um fechamento abrupto são apagadas na abertura seguinte.
+- **Atualizações assinadas.** O app só instala um executável cuja assinatura minisign confira com a chave pública embutida nele, e só de URLs das releases deste repositório. A assinatura é conferida no download e de novo antes de trocar o executável.
 - **IPC isolado.** [`src-tauri/capabilities/default.json`](src-tauri/capabilities/default.json) libera comandos só para a janela `main`. As janelas de login (`login-*`) usam um diretório de dados próprio e não têm acesso nenhum ao backend.
 - **CSP restrita.** Só scripts da própria origem rodam. O protocolo `boladaomedia://` serve apenas arquivos das pastas de cache e recusa `..`, `/` e `\` no nome do arquivo.
 - **Proxy com credencial.** O proxy local só aceita a credencial aleatória da sessão, comparada em tempo constante, e o comando equivalente copiado vem com ela mascarada.
@@ -489,7 +521,8 @@ Os motores viajam dentro do binário. O `build.rs` comprime cada componente em u
 | Fila e Biblioteca | `%APPDATA%\Boladao\boladao.db` (SQLite) |
 | Motores extraídos | `%LOCALAPPDATA%\Boladao\bin` |
 | Capas, formas de onda e espectrogramas | `%LOCALAPPDATA%\Boladao\cache` |
-| Cookies e perfis de login | `%LOCALAPPDATA%\Boladao\cookies` e `webview-profiles` |
+| Cookies (criptografados) e perfis de login | `%LOCALAPPDATA%\Boladao\cookies` e `webview-profiles` |
+| Atualização baixada, antes de instalar | `%LOCALAPPDATA%\Boladao\updates` |
 | Modelo do Whisper | `%LOCALAPPDATA%\Boladao\models` |
 | Arquivos temporários | `.boladao-tmp`, dentro da pasta de destino (no mesmo disco) |
 
@@ -534,6 +567,7 @@ BOLADAO/
 │       ├── probe/              # Sondagem com yt-dlp -J e cache
 │       ├── queue/              # Agendador, prioridades, limites por site e novas tentativas
 │       ├── spec/               # DownloadSpec, WorkshopSpec e presets nativos
+│       ├── updater/            # Atualização automática pelas releases do GitHub (assinada)
 │       ├── winproc/            # Job Objects, CREATE_NO_WINDOW e prioridade de processo
 │       ├── workshop/           # Pipeline do FFmpeg
 │       └── settings.rs         # Ajustes, gravação atômica e teste de contraste WCAG
@@ -556,7 +590,7 @@ BOLADAO/
 | CPU com 3 downloads limitados a 2 MB/s | 0,21% |
 | GPU com *Reduzir movimento*, Modo Jogo ou janela minimizada | 0%, porque o loop de renderização para |
 | Processos órfãos depois de cancelar ou fechar à força | 0, graças aos Job Objects |
-| `cargo test` | 18 de 18 aprovados |
+| `cargo test` | 27 de 27 aprovados |
 
 <sub>Medições do autor no Windows 10/11 x64, no processo principal (<code>Boladão.exe</code>). O WebView2 roda em processos próprios do Windows, que não entram nesses números.</sub>
 
@@ -580,7 +614,7 @@ Não. O Boladão é feito para Windows 10 e 11 (x64) e depende de recursos do si
 
 Não há telemetria. Fora os sites de onde você baixa (e as janelas de login, quando você as abre), o app só se conecta a:
 
-- GitHub, para a verificação semanal de versões do yt-dlp e para a atualização, quando você aceita;
+- GitHub, para conferir e baixar versões novas do Boladão (ao abrir e a cada 6 horas), para a verificação semanal de versões do yt-dlp e para a atualização dele, quando você aceita;
 - Hugging Face, para baixar o modelo do Whisper, se você ligar a transcrição;
 - Microsoft, pelo instalador oficial do WebView2, se ele estiver faltando no sistema.
 
@@ -619,7 +653,6 @@ Pode, com cuidado. Usar uma conta logada com o yt-dlp pode levar a restrições 
 
 - **DRM.** Spotify, Netflix, Disney+, Prime Video, Apple Music, Deezer e Tidal usam DRM e não são suportados pelo yt-dlp. O app reconhece esses links e avisa na hora.
 - **Cookies do Chrome e do Edge.** A criptografia *App-Bound* desses navegadores (v127+) impede a leitura dos cookies por outros programas no Windows. Para o YouTube, use o Firefox ou um `cookies.txt`; para as outras plataformas, a janela de login em *Ajustes → Contas*.
-- **Retomada depois de fechar o app.** Os itens voltam para a fila, mas os que salvam nas pastas padrão recomeçam do zero, porque a pasta temporária `.boladao-tmp` é limpa na abertura. Pausar e retomar com o app aberto continua do ponto em que parou.
 - **Transcrição experimental.** O modelo `base` do Whisper (~148 MB) não vai no instalador. Ele é baixado do Hugging Face na primeira vez em que a transcrição roda.
 - **Oficina parcial na interface.** O pipeline já aceita fade, mono/estéreo, escala, FPS, extração de quadro em PNG e recodificação em HEVC e AV1, mas esses controles ainda não estão na tela.
 
@@ -630,7 +663,7 @@ Pode, com cuidado. Usar uma conta logada com o yt-dlp pode levar a restrições 
 - **Bugs e ideias:** use os modelos de [bug](https://github.com/aekasota/BOLADAO/issues/new?template=bug_report.md) e de [melhoria](https://github.com/aekasota/BOLADAO/issues/new?template=feature_request.md). Em bugs de download, inclua o log do item (seta › à direita dele, na **Fila**) e a saída de *Ajustes → Componentes → Testar motores*.
 - **Antes do pull request:** `npm run build` e `cargo test` precisam passar.
 - **Texto da interface:** português do Brasil, no tom do app: frases curtas, sem jargão e com uma ação quando algo dá errado.
-- **Cores:** só pelos tokens de [`src/theme/tokens.css`](src/theme/tokens.css). Ao mudar um tema, atualize também as cores do shader em [`src/shader/physics.ts`](src/shader/physics.ts) e a tabela do teste de contraste em [`src-tauri/src/settings.rs`](src-tauri/src/settings.rs), porque o teste não lê o CSS.
+- **Cores:** só pelos tokens de [`src/theme/tokens.css`](src/theme/tokens.css). Ao mudar um tema, atualize também as cores do shader em [`src/shader/physics.ts`](src/shader/physics.ts) e a tabela do teste de contraste em [`src-tauri/src/settings.rs`](src-tauri/src/settings.rs), porque o teste não lê o CSS. Um tema novo entra ainda no `ThemeId` ([`src/lib/ipc.ts`](src/lib/ipc.ts) e `settings.rs`) e no seletor de [`SettingsTab.tsx`](src/features/settings/SettingsTab.tsx).
 - **Argumentos do yt-dlp:** os snapshots em `src-tauri/src/args/snapshots/` acusam qualquer mudança. Revise com `cargo insta review` (instale com `cargo install cargo-insta`).
 
 <br />

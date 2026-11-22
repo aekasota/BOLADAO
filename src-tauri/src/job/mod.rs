@@ -61,6 +61,12 @@ impl JobState {
                 | Self::Workshop
         )
     }
+
+    /// Whether the job may still resume from the `.part`/`.ytdl` files in `.boladao-tmp`
+    /// (queued, active, paused, failed or interrupted). Only finished and canceled jobs let go of them.
+    pub fn keeps_partial_files(self) -> bool {
+        !matches!(self, Self::Done | Self::Canceled)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

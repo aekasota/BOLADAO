@@ -31,6 +31,11 @@ export const THEME_SHADER_PALETTES: Record<string, ThemeShaderColors> = {
     colB: hexToRgb("#0D0F1A"),
     bg: hexToRgb("#0B0D16"),
   },
+  breu: {
+    colA: hexToRgb("#000000"),
+    colB: hexToRgb("#1A1A1A"),
+    bg: hexToRgb("#000000"),
+  },
 };
 
 export function hexToRgb(hex: string): Rgb {

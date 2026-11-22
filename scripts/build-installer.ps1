@@ -56,10 +56,40 @@ try {
         $Stream.Close()
     }
 
+    # 3. Assina o instalador para a atualização automática e gera o latest.json da release.
+    #    A chave privada fica fora do repositório (padrão: %USERPROFILE%\.boladao\updater.key).
+    $KeyPath = if ($env:BOLADAO_UPDATER_KEY) { $env:BOLADAO_UPDATER_KEY } else { Join-Path $HOME ".boladao\updater.key" }
+    $Manifest = Join-Path $InstallerDir "latest.json"
+    if (Test-Path $KeyPath) {
+        $env:CI = "true"
+        if (-not $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD) { $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "" }
+        & npx tauri signer sign -f $KeyPath $FinalInstaller | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Falha ao assinar o instalador para a atualização automática" }
+
+        $Version = (Get-Content (Join-Path $RepoRoot "src-tauri\tauri.conf.json") -Raw | ConvertFrom-Json).version
+        $Signature = (Get-Content "$FinalInstaller.sig" -Raw).Trim()
+        $Json = [ordered]@{
+            version   = $Version
+            notes     = "https://github.com/aekasota/BOLADAO/releases/tag/v$Version"
+            pub_date  = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            url       = "https://github.com/aekasota/BOLADAO/releases/download/v$Version/Boladao-Instalador.exe"
+            signature = $Signature
+        } | ConvertTo-Json
+        # UTF-8 sem BOM: o leitor de JSON do app não aceita BOM.
+        [System.IO.File]::WriteAllText($Manifest, $Json, (New-Object System.Text.UTF8Encoding($false)))
+    } else {
+        Remove-Item $Manifest, "$FinalInstaller.sig" -ErrorAction SilentlyContinue
+        Write-Host "`nAviso: chave de atualização não encontrada em $KeyPath." -ForegroundColor Yellow
+        Write-Host "O instalador foi gerado, mas sem assinatura não serve como atualização automática." -ForegroundColor Yellow
+    }
+
     $SizeMb = [Math]::Round((Get-Item $FinalInstaller).Length / 1MB, 2)
     Write-Host "`nInstalador Op-Art e versão portátil criados com sucesso!" -ForegroundColor Green
     Write-Host "  Instalador : $FinalInstaller ($SizeMb MB)"
     Write-Host "  Portátil   : $FinalPortable"
+    if (Test-Path $Manifest) {
+        Write-Host "  Atualização: $Manifest (suba junto com o instalador na release v$Version)"
+    }
 } finally {
     Pop-Location
 }

@@ -1,12 +1,12 @@
 use crate::args::ExecContext;
 use crate::bins::BinManager;
 use crate::classify::{classify_url, normalize_url_for_dedup, SourceKind};
-use crate::cookies::resolve_cookie_source;
+use crate::cookies::prepare_cookie_source;
 use crate::gamemode::GameModeMonitor;
 use crate::job::{execute_job_pipeline, ActiveJobHandle, Job, JobState, Progress, SourceMeta};
 use crate::library::{analyze_completed_file, LibraryEntry, LibraryStore};
 use crate::limiter::BandwidthLimiter;
-use crate::paths::{app_config_dir, TEMP_SUBDIR_NAME};
+use crate::paths::{app_config_dir, cleanup_stale_temp_dirs, TEMP_SUBDIR_NAME};
 use crate::probe::PlaylistEntryPreview;
 use crate::settings::AppSettings;
 use crate::spec::DownloadSpec;
@@ -15,9 +15,9 @@ use chrono::Utc;
 use parking_lot::{Mutex, RwLock};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -101,6 +101,17 @@ impl QueueManager {
                 j.progress.eta_s = None;
                 let _ = persist_job_row(&conn, j);
             }
+        }
+
+        // `.boladao-tmp` holds the partial files that let interrupted downloads resume, so it is
+        // only wiped for destination folders where no job can still use it.
+        {
+            let cfg = settings.read();
+            let idle = idle_temp_roots(
+                loaded_jobs.iter().map(|j| (j.spec.output_root.as_path(), j.state)),
+                [cfg.music_root.as_path(), cfg.video_root.as_path()],
+            );
+            cleanup_stale_temp_dirs(&idle);
         }
 
         let mut group_sizes: HashMap<Uuid, usize> = HashMap::new();
@@ -375,9 +386,25 @@ impl QueueManager {
             });
         }
 
-        // Clean temporary `.part` / `.ytdl` files belonging to this canceled job
+        // Clean the canceled job's temporary files without touching partial downloads of other jobs
+        // (paused or queued jobs are not "active", so a folder-wide wipe would destroy their progress).
         if let Some(root) = root_to_clean {
-            clean_job_temp_files(&root.join(TEMP_SUBDIR_NAME), item_id_hint.as_deref(), !self.has_active_jobs());
+            if let Some(hint) = item_id_hint.as_deref() {
+                remove_temp_files_with_id(&root.join(TEMP_SUBDIR_NAME), hint, 6);
+            }
+            self.clean_temp_if_idle(&root, Some(id));
+        }
+    }
+
+    /// Wipes `<root>\.boladao-tmp` when no remaining job (besides `ignore`) can still resume from it.
+    fn clean_temp_if_idle(&self, root: &Path, ignore: Option<Uuid>) {
+        let busy = self
+            .jobs
+            .read()
+            .iter()
+            .any(|j| Some(j.id) != ignore && j.state.keeps_partial_files() && j.spec.output_root == root);
+        if !busy {
+            cleanup_stale_temp_dirs(&[root.to_path_buf()]);
         }
     }
 
@@ -461,7 +488,17 @@ impl QueueManager {
                 );
             }
         }
+        let touched_roots: BTreeSet<PathBuf> = self
+            .jobs
+            .read()
+            .iter()
+            .filter(|j| ids.contains(&j.id))
+            .map(|j| j.spec.output_root.clone())
+            .collect();
         self.jobs.write().retain(|j| !ids.contains(&j.id));
+        for root in &touched_roots {
+            self.clean_temp_if_idle(root, None);
+        }
         self.emit_queue_changed();
         self.update_taskbar_progress();
     }
@@ -637,12 +674,15 @@ impl QueueManager {
         let mut job_with_globals = job;
         job_with_globals.spec = spec_with_globals;
 
+        // The lease holds the decrypted cookie copy for yt-dlp; it is dropped right after the pipeline.
+        let (cookie_source, cookie_lease) =
+            prepare_cookie_source(&job_with_globals.source.platform_id, &cfg.accounts);
         let ctx = ExecContext {
             ffmpeg_dir: self.bins.ffmpeg_dir(),
             deno_exe: self.bins.deno_exe(),
             proxy_url: self.limiter.proxy_url(),
             fallback_limit_bps: fallback_bps,
-            cookies: resolve_cookie_source(&job_with_globals.source.platform_id, &cfg.accounts),
+            cookies: cookie_source,
             archive_file: archive_path,
             apply_anti_429_sleep: large_playlist,
             impersonate_target: None,
@@ -668,6 +708,7 @@ impl QueueManager {
             },
         )
         .await;
+        drop(cookie_lease);
 
         self.active_handles.lock().remove(&job_id);
 
@@ -753,17 +794,10 @@ impl QueueManager {
                 self.notify_completion(&app, &finished_job.title);
             }
 
-            // Remove empty `.boladao-tmp` directory once all jobs finish
-            if !self.has_active_jobs() {
-                let tmp = finished_job.spec.output_root.join(TEMP_SUBDIR_NAME);
-                if tmp.is_dir()
-                    && fs::read_dir(&tmp)
-                        .map(|mut it| it.next().is_none())
-                        .unwrap_or(false)
-                {
-                    let _ = fs::remove_dir(&tmp);
-                }
-            }
+            // Leftovers of earlier canceled jobs go away once nothing in this folder can resume
+            self.clean_temp_if_idle(&finished_job.spec.output_root, None);
+        } else if finished_job.state == JobState::Canceled {
+            self.clean_temp_if_idle(&finished_job.spec.output_root, None);
         } else if finished_job.state == JobState::Failed {
             if let (Some(app), Some(err)) = (
                 self.app_handle.read().clone(),
@@ -990,25 +1024,88 @@ fn extract_media_id_hint(url: &str) -> Option<String> {
     None
 }
 
-fn clean_job_temp_files(tmp_dir: &Path, id_hint: Option<&str>, delete_all_if_idle: bool) {
-    if !tmp_dir.is_dir() {
+/// Deletes temporary files whose name carries `[<media id>]` (as the output templates write it),
+/// searching subfolders up to `depth` levels because yt-dlp mirrors the template folders inside `.boladao-tmp`.
+/// Matching the bracketed id keeps generic URL segments from deleting other jobs' files.
+fn remove_temp_files_with_id(dir: &Path, media_id: &str, depth: usize) {
+    let tag = format!("[{media_id}]");
+    let Ok(entries) = fs::read_dir(dir) else {
         return;
-    }
-    if delete_all_if_idle {
-        let _ = fs::remove_dir_all(tmp_dir);
-        return;
-    }
-    if let Some(hint) = id_hint {
-        if let Ok(entries) = fs::read_dir(tmp_dir) {
-            for e in entries.flatten() {
-                let p = e.path();
-                if p.file_name()
-                    .map(|n| n.to_string_lossy().contains(hint))
-                    .unwrap_or(false)
-                {
-                    let _ = fs::remove_file(p);
-                }
+    };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            if depth > 0 {
+                remove_temp_files_with_id(&p, media_id, depth - 1);
             }
+        } else if p
+            .file_name()
+            .map(|n| n.to_string_lossy().contains(&tag))
+            .unwrap_or(false)
+        {
+            let _ = fs::remove_file(&p);
         }
+    }
+}
+
+/// Destination folders whose `.boladao-tmp` can be wiped: every known folder without a job that
+/// may still resume from its partial files.
+fn idle_temp_roots<'a>(
+    jobs: impl IntoIterator<Item = (&'a Path, JobState)>,
+    extra_roots: impl IntoIterator<Item = &'a Path>,
+) -> Vec<PathBuf> {
+    let mut all: BTreeSet<&Path> = BTreeSet::new();
+    let mut busy: BTreeSet<&Path> = BTreeSet::new();
+    for (root, state) in jobs {
+        all.insert(root);
+        if state.keeps_partial_files() {
+            busy.insert(root);
+        }
+    }
+    all.extend(extra_roots);
+    all.into_iter()
+        .filter(|root| !busy.contains(root))
+        .map(Path::to_path_buf)
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keeps_temp_files_of_jobs_that_can_still_resume() {
+        let music = Path::new(r"C:\Musicas");
+        let video = Path::new(r"C:\Videos");
+        let custom = Path::new(r"D:\Custom");
+        let jobs = [
+            (video, JobState::Paused),
+            (video, JobState::Done),
+            (custom, JobState::Done),
+            (custom, JobState::Canceled),
+        ];
+        let idle = idle_temp_roots(jobs, [music, video]);
+        assert_eq!(idle, vec![music.to_path_buf(), custom.to_path_buf()]);
+
+        for pending in [JobState::Queued, JobState::Downloading, JobState::Failed, JobState::Workshop] {
+            assert!(idle_temp_roots([(music, pending)], [music]).is_empty(), "{pending:?} must keep its .part files");
+        }
+    }
+
+    #[test]
+    fn removes_only_temp_files_tagged_with_the_canceled_media_id() {
+        let tmp = tempfile::tempdir().unwrap();
+        let nested = tmp.path().join("YouTube").join("duzz");
+        fs::create_dir_all(&nested).unwrap();
+        let mine = nested.join("Atravessei [WbnEjpLxj70].mp4.part");
+        let other = nested.join("Outro video [AAAAAAAAAAA].mp4.part");
+        let untagged = nested.join("WbnEjpLxj70 sem colchetes.part");
+        for f in [&mine, &other, &untagged] {
+            fs::write(f, b"x").unwrap();
+        }
+        remove_temp_files_with_id(tmp.path(), "WbnEjpLxj70", 6);
+        assert!(!mine.exists());
+        assert!(other.exists());
+        assert!(untagged.exists());
     }
 }

@@ -499,6 +499,8 @@ pub fn next_available_collision_path(desired: &Path) -> PathBuf {
 }
 
 /// Cleans leftover `.boladao-tmp` folders inside configured library roots at startup (only when no active jobs own them).
+/// Removes `<root>\.boladao-tmp` for each root. Callers must only pass folders where no job can still
+/// resume from its partial files (see `QueueManager::clean_temp_if_idle`).
 pub fn cleanup_stale_temp_dirs(roots: &[PathBuf]) {
     for root in roots {
         let tmp = root.join(TEMP_SUBDIR_NAME);
@@ -522,6 +524,28 @@ pub fn open_file_default(path: &Path) -> Result<(), String> {
             .creation_flags(crate::winproc::CREATE_NO_WINDOW_FLAG)
             .spawn()
             .map_err(|e| format!("Falha ao abrir arquivo: {e}"))?;
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        Err("Apenas Windows suportado.".to_string())
+    }
+}
+
+/// Opens an `https://` link in the default browser.
+pub fn open_url_default(url: &str) -> Result<(), String> {
+    if !url.starts_with("https://") {
+        return Err("Link inválido.".to_string());
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("rundll32.exe")
+            .arg("url.dll,FileProtocolHandler")
+            .arg(url)
+            .creation_flags(crate::winproc::CREATE_NO_WINDOW_FLAG)
+            .spawn()
+            .map_err(|e| format!("Falha ao abrir o navegador: {e}"))?;
         Ok(())
     }
     #[cfg(not(windows))]

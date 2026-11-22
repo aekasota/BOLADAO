@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import {
   api,
+  AppUpdateInfo,
   BandwidthProfile,
   BinsStatusPayload,
   GameModeStatus,
@@ -95,6 +96,8 @@ const MainApp: React.FC = () => {
 
   const [freeDiskBytes, setFreeDiskBytes] = useState<number | null>(null);
   const [updateBannerVer, setUpdateBannerVer] = useState<string | null>(null);
+  const [appUpdate, setAppUpdate] = useState<AppUpdateInfo | null>(null);
+  const [applyingUpdate, setApplyingUpdate] = useState(false);
   const [maximized, setMaximized] = useState(false);
 
   // Shrink stage to the top Notch crown strip whenever user switches away from Download tab (Section 13.5)
@@ -110,6 +113,7 @@ const MainApp: React.FC = () => {
     loadQueue();
     api.getBinsStatus().then(setBinsStatus);
     api.getGameModeStatus().then(setGameMode);
+    api.getPendingUpdate().then((u) => u && setAppUpdate(u));
 
     let unlisteners: (() => void)[] = [];
     (async () => {
@@ -159,6 +163,11 @@ const MainApp: React.FC = () => {
       unlisteners.push(
         await safeListen<GameModeStatus>("gamemode:changed", (gm) => {
           setGameMode(gm);
+        })
+      );
+      unlisteners.push(
+        await safeListen<AppUpdateInfo>("app:update_ready", (u) => {
+          setAppUpdate(u);
         })
       );
     })();
@@ -578,6 +587,46 @@ const MainApp: React.FC = () => {
           </div>
         )}
 
+        {/* Boladão update downloaded and verified: installs now or on the next start */}
+        {appUpdate && (
+          <div
+            style={{
+              zIndex: 15,
+              background: "var(--surface-2)",
+              borderBottom: "1px solid var(--line)",
+              padding: "6px 24px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 12,
+              fontSize: 12.5,
+            }}
+          >
+            <span>
+              Boladão {appUpdate.version} está pronto e entra sozinho na próxima abertura. Downloads em
+              andamento continuam de onde pararam.
+            </span>
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={applyingUpdate}
+              onClick={async () => {
+                setApplyingUpdate(true);
+                try {
+                  await api.applyUpdateNow();
+                } catch {
+                  setApplyingUpdate(false);
+                }
+              }}
+            >
+              <RefreshCw size={12} /> Reiniciar agora
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setAppUpdate(null)}>
+              Depois
+            </Button>
+          </div>
+        )}
+
         {/* Discreet 6-second Clipboard Pill when window regains focus (Section 6) */}
         <AnimatePresence>
           {clipboardSuggestion && (
@@ -843,6 +892,16 @@ const MainApp: React.FC = () => {
               }}
             />
             <span
+              role="link"
+              tabIndex={0}
+              aria-label="Abrir o GitHub de @aekasota"
+              onClick={() => api.openAuthorProfile()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  api.openAuthorProfile();
+                }
+              }}
               className="font-mono-num"
               style={{
                 fontSize: 11,
@@ -852,6 +911,7 @@ const MainApp: React.FC = () => {
                 alignItems: "center",
                 gap: 1,
                 userSelect: "none",
+                cursor: "pointer",
               }}
             >
               <span style={{ color: "var(--accent-text)", fontWeight: 700 }}>@</span>

@@ -2,7 +2,7 @@ use crate::bins::{BinManager, BinsStatusPayload};
 use crate::classify::{classify_url, extract_urls_from_text, Classification};
 use crate::cookies::{
     harvest_login_window_cookies, import_cookies_txt_file, logout_account,
-    open_isolated_login_window, resolve_cookie_source, AccountAuthKind, ConnectedAccount,
+    open_isolated_login_window, prepare_cookie_source, AccountAuthKind, ConnectedAccount,
 };
 use crate::gamemode::{GameModeMonitor, GameModeOverride, GameModeStatus};
 use crate::installer::{
@@ -17,8 +17,8 @@ use crate::library::{
 };
 use crate::limiter::{BandwidthLimiter, BandwidthProfile, LimiterStatsPayload};
 use crate::paths::{
-    app_config_dir, app_local_dir, free_disk_bytes, open_file_default, preview_output_path,
-    reveal_in_explorer, PathPreviewSample,
+    app_config_dir, app_local_dir, free_disk_bytes, open_file_default, open_url_default,
+    preview_output_path, reveal_in_explorer, PathPreviewSample,
 };
 use crate::probe::{PlaylistEntryPreview, ProbeResult, ProbeScope, ProbeService};
 use crate::queue::{EnqueueOutcome, EnqueueRequest, QueueManager};
@@ -92,6 +92,40 @@ pub fn rollback_ytdlp(app: AppHandle, state: State<'_, AppState>) -> Result<Stri
     state.bins.rollback_ytdlp(Some(&app))
 }
 
+#[derive(serde::Serialize, Clone)]
+pub struct AppUpdateInfo {
+    pub version: String,
+    pub notes: Option<String>,
+}
+
+/// Update already downloaded and verified, if any (the banner may mount after the event fired).
+#[tauri::command]
+pub fn get_pending_update() -> Option<AppUpdateInfo> {
+    crate::updater::read_pending().map(|p| AppUpdateInfo {
+        version: p.version,
+        notes: p.notes,
+    })
+}
+
+/// Installs the pending update and restarts. Running downloads are killed with the old process and
+/// resume from their partial files after the restart.
+#[tauri::command]
+pub fn apply_update_now(app: AppHandle) -> Result<(), String> {
+    if crate::updater::apply_pending(true)? {
+        app.exit(0);
+        Ok(())
+    } else {
+        Err("Nenhuma atualização pronta para instalar.".to_string())
+    }
+}
+
+/// Opens the author's GitHub profile from the status bar. The URL is fixed here so the webview
+/// cannot use this command to open arbitrary targets.
+#[tauri::command]
+pub fn open_author_profile() -> Result<(), String> {
+    open_url_default("https://github.com/aekasota")
+}
+
 #[tauri::command]
 pub fn classify_url_cmd(url: String) -> Result<Classification, String> {
     classify_url(&url)
@@ -116,11 +150,11 @@ pub async fn probe(
         transient: false,
         suggest_impersonate: false,
     })?;
-    let cookies = {
+    let (cookies, cookie_lease) = {
         let cfg = state.settings.read();
-        resolve_cookie_source(&cls.platform_id, &cfg.accounts)
+        prepare_cookie_source(&cls.platform_id, &cfg.accounts)
     };
-    state
+    let result = state
         .probe
         .probe_url(
             &url,
@@ -129,7 +163,9 @@ pub async fn probe(
             state.limiter.proxy_url(),
             cookies,
         )
-        .await
+        .await;
+    drop(cookie_lease);
+    result
 }
 
 #[tauri::command]
