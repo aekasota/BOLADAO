@@ -19,7 +19,6 @@ import {
   BandwidthProfile,
   CollisionPolicy,
   GameModeOverride,
-  LanguageSetting,
   safeListen,
   SpeedUnit,
   ThemeId,
@@ -41,7 +40,7 @@ import {
   Slider,
   Toggle,
 } from "../../ui/Primitives";
-import { formatDate, formatDecimal, LANGUAGE_NAMES, useSystemLanguage, useT } from "../../i18n";
+import { formatDate, formatDecimal, useT } from "../../i18n";
 
 const ACCOUNT_PLATFORMS = [
   { id: "youtube", name: "YouTube / YouTube Music", slug: "youtube", color: "#FF0033" },
@@ -55,7 +54,6 @@ const ACCOUNT_PLATFORMS = [
 
 export const SettingsTab: React.FC = () => {
   const t = useT();
-  const systemLanguage = useSystemLanguage((s) => s.language);
   const settings = useSettingsStore((s) => s.settings);
   const presets = useSettingsStore((s) => s.presets);
   const updateSettings = useSettingsStore((s) => s.updateSettings);
@@ -786,24 +784,6 @@ export const SettingsTab: React.FC = () => {
               <h2 className="font-display" style={{ margin: 0, fontSize: 18 }}>
                 {t.settings.appearance.title}
               </h2>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{t.settings.appearance.language}</span>
-                <Segmented<LanguageSetting>
-                  id="ui-language"
-                  value={settings.language ?? "auto"}
-                  onChange={(language) => updateSettings({ language })}
-                  options={[
-                    { value: "auto", label: t.settings.appearance.languageAuto },
-                    { value: "pt", label: LANGUAGE_NAMES.pt },
-                    { value: "en", label: LANGUAGE_NAMES.en },
-                    { value: "es", label: LANGUAGE_NAMES.es },
-                  ]}
-                />
-                <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-                  {t.settings.appearance.languageAutoHint(LANGUAGE_NAMES[systemLanguage])}
-                </span>
-              </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
                 {(

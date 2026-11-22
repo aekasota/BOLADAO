@@ -10,6 +10,9 @@ export type { Messages };
 
 const CATALOG: Record<Lang, Messages> = { pt, en, es };
 
+/** The supported languages, in the order the language chip lists them. */
+export const LANGS: Lang[] = ["pt", "en", "es"];
+
 /** Each language by its own name, as the language picker shows it. */
 export const LANGUAGE_NAMES: Record<Lang, string> = { pt: "Português", en: "English", es: "Español" };
 

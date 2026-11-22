@@ -18,9 +18,6 @@ export const pt = {
     queuedCount: (n: number) => `${n} na fila`,
     limiter: {
       gameMode: (speed: string) => `Modo jogo · ${speed}`,
-      unlimited: "Banda · ∞",
-      balanced: (speed: string) => `Equilibrado · ${speed}`,
-      light: (speed: string) => `Leve · ${speed}`,
       popoverTitle: "Limite de banda ao vivo",
     },
     profiles: {
@@ -29,8 +26,14 @@ export const pt = {
       light: "Leve",
       custom: "Personalizado",
     },
-    freeDiskTitle: "Espaço livre no disco de destino",
+    resourcesAria: "Banda e disco",
+    diskLabel: "Disco de destino",
     freeDisk: (size: string) => `${size} livres`,
+    language: {
+      title: "Idioma",
+      followWindows: "Seguir o idioma do Windows",
+      chipAria: (name: string) => `Idioma: ${name}. Trocar idioma`,
+    },
     authorLink: "Abrir o GitHub de @aekasota",
   },
 
@@ -299,10 +302,6 @@ export const pt = {
     },
     appearance: {
       title: "Aparência",
-      language: "Idioma",
-      languageAuto: "Automático",
-      languageAutoHint: (name: string) =>
-        `No automático, o Boladão segue o idioma do Windows (agora: ${name}).`,
       themes: {
         sangue: "Sangue",
         papel: "Papel",

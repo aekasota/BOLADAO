@@ -671,6 +671,7 @@ export const DownloadTab: React.FC<{
                   }}
                   placeholder={t.download.urlPlaceholder}
                   aria-label={t.download.urlAria}
+                  className="url-input"
                   style={{
                     flex: 1,
                     minWidth: 0,

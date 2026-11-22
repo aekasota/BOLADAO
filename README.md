@@ -56,7 +56,7 @@ O Boladão junta yt-dlp, FFmpeg e Deno em um aplicativo nativo. Você instala, c
 - **Fila persistente.** Fica salva em SQLite, tenta de novo quando a rede oscila e, se o app fechar no meio, continua cada download de onde parou.
 - **Biblioteca com análise técnica.** `ffprobe`, loudness, forma de onda e um espectrograma que acusa quando a fonte já tinha perdas.
 - **Transparente.** Avisa sobre DRM antes de tentar, explica cada erro com a ação para resolver e mostra o comando `yt-dlp` equivalente de cada download.
-- **Em três idiomas.** Português, inglês e espanhol, escolhido pelo idioma do Windows e trocável em *Ajustes → Aparência*. O inglês e o espanhol são neutros, para soar natural em qualquer país.
+- **Em três idiomas.** Português, inglês e espanhol, escolhido pelo idioma do Windows e trocável no botão de idioma da barra de status. O inglês e o espanhol são neutros, para soar natural em qualquer país.
 
 <br />
 
@@ -132,12 +132,12 @@ O retângulo ao lado do nome, no canto superior esquerdo, é um recorte de 24 ×
 - **Janela própria.** Sem a moldura do Windows: o cabeçalho arrasta a janela, o clique duplo maximiza e os controles ficam em uma pílula à direita.
 - **Tipografia.** Archivo variável (largura de 62% a 125%, peso de 100 a 900) no texto. Títulos e abas usam a largura máxima, peso 860 e caixa alta. Velocidades, tamanhos, tempos, caminhos e versões usam JetBrains Mono com algarismos tabulares, para que os números não tremam enquanto mudam. As duas fontes vão embutidas no app.
 - **Progresso em listras.** As barras são listras diagonais nas cores do tema e correm mais rápido quanto maior a velocidade do download. Na pausa, elas param e ficam cinza; com erro, ficam âmbar; ao concluir, verdes. O carregamento e o seletor de temas usam as mesmas listras.
-- **Barra de status.** Sempre visível: velocidade total com o gráfico dos últimos 60 s, itens ativos e na fila, o limite de banda (que abre o controle ao vivo) e o espaço livre no disco de destino.
+- **Barra de status.** Sempre visível: velocidade total com o gráfico dos últimos 60 s, itens ativos e na fila e, à direita, dois botões. Um troca o idioma; o outro abre o limite de banda ao vivo e mostra o espaço livre no disco de destino. Um ponto no ícone avisa que há um limite ligado, e o botão fica na cor do tema enquanto o Modo Jogo segura os downloads.
 - **Movimento.** Durações de 120, 200 e 320 ms com a mesma curva de saída, e molas para o que muda de lugar. *Reduzir movimento* congela o fundo, as listras e as transições das abas.
 
 ### Texto
 
-A interface nasceu em português do Brasil, com frases curtas e sem jargão, e fala também inglês e espanhol neutros. O idioma segue o do Windows (números e datas seguem o formato regional) e pode ser fixado em *Ajustes → Aparência*; a troca vale na hora, inclusive no menu da bandeja e nas notificações. Quando o yt-dlp falha, o app traduz o erro e oferece uma saída:
+A interface nasceu em português do Brasil, com frases curtas e sem jargão, e fala também inglês e espanhol neutros. O idioma segue o do Windows (números e datas seguem o formato regional) e pode ser fixado no botão de idioma da barra de status; a troca vale na hora, inclusive no menu da bandeja e nas notificações. Quando o yt-dlp falha, o app traduz o erro e oferece uma saída:
 
 | O yt-dlp responde | O Boladão mostra | E oferece |
 |---|---|---|

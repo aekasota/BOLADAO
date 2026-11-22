@@ -20,9 +20,6 @@ export const es: Messages = {
     queuedCount: (n: number) => `${n} en cola`,
     limiter: {
       gameMode: (speed: string) => `Modo juego · ${speed}`,
-      unlimited: "Límite · ∞",
-      balanced: (speed: string) => `Equilibrado · ${speed}`,
-      light: (speed: string) => `Ligero · ${speed}`,
       popoverTitle: "Límite de ancho de banda en vivo",
     },
     profiles: {
@@ -31,8 +28,14 @@ export const es: Messages = {
       light: "Ligero",
       custom: "Personalizado",
     },
-    freeDiskTitle: "Espacio libre en el disco de destino",
+    resourcesAria: "Ancho de banda y disco",
+    diskLabel: "Disco de destino",
     freeDisk: (size: string) => `${size} libres`,
+    language: {
+      title: "Idioma",
+      followWindows: "Seguir el idioma de Windows",
+      chipAria: (name: string) => `Idioma: ${name}. Cambiar idioma`,
+    },
     authorLink: "Abrir el GitHub de @aekasota",
   },
 
@@ -301,10 +304,6 @@ export const es: Messages = {
     },
     appearance: {
       title: "Apariencia",
-      language: "Idioma",
-      languageAuto: "Automático",
-      languageAutoHint: (name: string) =>
-        `En automático, Boladão sigue el idioma de Windows (ahora: ${name}).`,
       themes: {
         sangue: "Sangre",
         papel: "Papel",

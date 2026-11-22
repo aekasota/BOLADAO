@@ -1,19 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import {
-  ClipboardPaste,
-  Gamepad2,
-  HardDrive,
-  Maximize2,
-  Minus,
-  Square,
-  X,
-} from "lucide-react";
+import { ClipboardPaste, Maximize2, Minus, Square, X } from "lucide-react";
 import {
   api,
   AppUpdateInfo,
-  BandwidthProfile,
   BinsStatusPayload,
   GameModeStatus,
   isTauriRuntime,
@@ -25,15 +16,11 @@ import {
   readInitialLaunchMode,
   safeListen,
 } from "../lib/ipc";
-import {
-  bpsToLogSlider,
-  formatBytes,
-  formatDualBandwidth,
-  formatSpeedPrimary,
-  logSliderToBps,
-} from "../lib/format";
+import { formatSpeedPrimary } from "../lib/format";
 import { OpArtCanvas } from "../shader/OpArtCanvas";
 import { UpdateChip } from "./UpdateNotice";
+import { LanguageChip } from "./LanguageChip";
+import { ResourcesChip } from "./ResourcesChip";
 import { HTML_LANG, loadSystemLanguage, useLang, useT } from "../i18n";
 import { AppTab, useAppStore } from "../stores/appStore";
 import { useLimiterStore } from "../stores/limiterStore";
@@ -44,14 +31,7 @@ import { QueueTab } from "../features/queue/QueueTab";
 import { LibraryTab } from "../features/library/LibraryTab";
 import { SettingsTab } from "../features/settings/SettingsTab";
 import { InstallerView } from "../features/installer/InstallerView";
-import {
-  Chip,
-  Popover,
-  Slider,
-  SPRING_UI,
-  StripeProgress,
-  Tooltip,
-} from "../ui/Primitives";
+import { SPRING_UI, StripeProgress, Tooltip } from "../ui/Primitives";
 
 export const App: React.FC = () => {
   const [launchMode] = useState<LaunchMode>(() => readInitialLaunchMode());
@@ -89,7 +69,6 @@ const MainApp: React.FC = () => {
 
   const settings = useSettingsStore((s) => s.settings);
   const loadSettings = useSettingsStore((s) => s.loadSettings);
-  const updateSettings = useSettingsStore((s) => s.updateSettings);
 
   const jobs = useQueueStore((s) => s.jobs);
   const selectedIds = useQueueStore((s) => s.selectedIds);
@@ -98,11 +77,9 @@ const MainApp: React.FC = () => {
   const applyProgressEvent = useQueueStore((s) => s.applyProgressEvent);
 
   const limiterStats = useLimiterStore((s) => s.stats);
-  const gameMode = useLimiterStore((s) => s.gameMode);
   const setLimiterStats = useLimiterStore((s) => s.setStats);
   const setGameMode = useLimiterStore((s) => s.setGameMode);
 
-  const [freeDiskBytes, setFreeDiskBytes] = useState<number | null>(null);
   const [updateBannerVer, setUpdateBannerVer] = useState<string | null>(null);
   const [appUpdate, setAppUpdate] = useState<AppUpdateInfo | null>(null);
   const [applyingUpdate, setApplyingUpdate] = useState(false);
@@ -186,16 +163,6 @@ const MainApp: React.FC = () => {
       unlisteners.forEach((fn) => fn());
     };
   }, []);
-
-  // Poll free disk space every 15s on active destination root
-  useEffect(() => {
-    const refreshDisk = () => {
-      api.getFreeDiskSpace(settings.video_root).then(setFreeDiskBytes);
-    };
-    refreshDisk();
-    const id = setInterval(refreshDisk, 15_000);
-    return () => clearInterval(id);
-  }, [settings.video_root]);
 
   // Window Focus Clipboard Detector -> discreet 6s pill (Section 6)
   useEffect(() => {
@@ -363,22 +330,6 @@ const MainApp: React.FC = () => {
       })
       .join(" ");
   }, [limiterStats.sparkline_60s]);
-
-  const limiterChipLabel = useMemo(() => {
-    if (gameMode.active) {
-      return t.app.limiter.gameMode(formatSpeedPrimary(limiterStats.limit_bps, settings.speed_unit));
-    }
-    switch (limiterStats.profile) {
-      case "unlimited":
-        return t.app.limiter.unlimited;
-      case "balanced":
-        return t.app.limiter.balanced(formatSpeedPrimary(limiterStats.limit_bps, settings.speed_unit));
-      case "light":
-        return t.app.limiter.light(formatSpeedPrimary(limiterStats.limit_bps, settings.speed_unit));
-      case "custom":
-        return formatSpeedPrimary(limiterStats.limit_bps, settings.speed_unit);
-    }
-  }, [gameMode.active, limiterStats, settings.speed_unit, t]);
 
   const winMinimize = () => isTauriRuntime() && getCurrentWindow().minimize();
   const winToggleMax = async () => {
@@ -745,7 +696,7 @@ const MainApp: React.FC = () => {
             {t.app.activeCount(queueCounts.active)} · {t.app.queuedCount(queueCounts.queued)}
           </div>
 
-          {/* Right: Bandwidth / Game Mode Popover + Free Disk Space */}
+          {/* Right: updates ready, then language and bandwidth + disk, each with its own popover */}
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {/* Updates ready: Boladão (downloaded and verified) and the yt-dlp engine */}
             {appUpdate && (
@@ -777,97 +728,10 @@ const MainApp: React.FC = () => {
                 onAction={applyYtdlpUpdate}
               />
             )}
-            <Popover.Root>
-              <Popover.Trigger asChild>
-                <button
-                  type="button"
-                  className="font-mono-num"
-                  style={{
-                    height: 22,
-                    padding: "0 9px",
-                    borderRadius: 999,
-                    border: gameMode.active
-                      ? "1px solid var(--accent)"
-                      : "1px solid var(--line)",
-                    background: gameMode.active ? "var(--accent)" : "var(--surface-2)",
-                    color: gameMode.active ? "var(--on-accent)" : "var(--text)",
-                    fontSize: 11.5,
-                    fontWeight: 650,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    cursor: "pointer",
-                  }}
-                >
-                  {gameMode.active && <Gamepad2 size={12} />}
-                  {limiterChipLabel}
-                </button>
-              </Popover.Trigger>
-              <Popover.Portal>
-                <Popover.Content
-                  side="top"
-                  align="end"
-                  sideOffset={8}
-                  className="op-panel"
-                  style={{ padding: 14, width: 310, zIndex: 70, display: "flex", flexDirection: "column", gap: 10 }}
-                >
-                  <div style={{ fontSize: 12.5, fontWeight: 700 }}>{t.app.limiter.popoverTitle}</div>
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {(
-                      [
-                        ["unlimited", t.app.profiles.unlimited],
-                        ["balanced", t.app.profiles.balanced],
-                        ["light", t.app.profiles.light],
-                        ["custom", t.app.profiles.custom],
-                      ] as [BandwidthProfile, string][]
-                    ).map(([prof, lbl]) => (
-                      <Chip
-                        key={prof}
-                        active={settings.bandwidth_profile === prof}
-                        onClick={async () => {
-                          await api.setLimit(prof, settings.custom_limit_bps);
-                          await updateSettings({ bandwidth_profile: prof });
-                        }}
-                      >
-                        {lbl}
-                      </Chip>
-                    ))}
-                  </div>
-                  <div className="font-mono-num" style={{ fontSize: 11.5, color: "var(--text-2)" }}>
-                    {formatDualBandwidth(settings.custom_limit_bps, settings.speed_unit)}
-                  </div>
-                  <Slider
-                    min={0}
-                    max={100}
-                    step={0.5}
-                    value={[bpsToLogSlider(settings.custom_limit_bps)]}
-                    onValueChange={async ([v]) => {
-                      const bps = logSliderToBps(v);
-                      await api.setLimit("custom", bps);
-                      await updateSettings({
-                        bandwidth_profile: "custom",
-                        custom_limit_bps: bps,
-                      });
-                    }}
-                  />
-                </Popover.Content>
-              </Popover.Portal>
-            </Popover.Root>
-
-            {freeDiskBytes !== null && (
-              <span
-                className="font-mono-num"
-                style={{
-                  color: "var(--text-3)",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-                title={t.app.freeDiskTitle}
-              >
-                <HardDrive size={12} /> {t.app.freeDisk(formatBytes(freeDiskBytes))}
-              </span>
-            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <LanguageChip />
+              <ResourcesChip />
+            </div>
 
             <span
               aria-hidden="true"

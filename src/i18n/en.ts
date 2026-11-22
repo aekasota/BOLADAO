@@ -19,9 +19,6 @@ export const en: Messages = {
     queuedCount: (n: number) => `${n} queued`,
     limiter: {
       gameMode: (speed: string) => `Game Mode · ${speed}`,
-      unlimited: "Bandwidth · ∞",
-      balanced: (speed: string) => `Balanced · ${speed}`,
-      light: (speed: string) => `Light · ${speed}`,
       popoverTitle: "Live bandwidth limit",
     },
     profiles: {
@@ -30,8 +27,14 @@ export const en: Messages = {
       light: "Light",
       custom: "Custom",
     },
-    freeDiskTitle: "Free space on the destination drive",
+    resourcesAria: "Bandwidth and disk",
+    diskLabel: "Destination drive",
     freeDisk: (size: string) => `${size} free`,
+    language: {
+      title: "Language",
+      followWindows: "Follow the Windows language",
+      chipAria: (name: string) => `Language: ${name}. Change language`,
+    },
     authorLink: "Open @aekasota on GitHub",
   },
 
@@ -300,10 +303,6 @@ export const en: Messages = {
     },
     appearance: {
       title: "Appearance",
-      language: "Language",
-      languageAuto: "Automatic",
-      languageAutoHint: (name: string) =>
-        `On automatic, Boladão follows the Windows language (currently: ${name}).`,
       themes: {
         sangue: "Blood",
         papel: "Paper",
