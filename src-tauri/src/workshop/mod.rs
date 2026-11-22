@@ -68,7 +68,7 @@ where
     full_args.extend_from_slice(args_without_progress);
 
     let mut child = spawn_in_job(job_group, ffmpeg_exe, &full_args, priority, None)
-        .map_err(|e| format!("Falha iniciando ffmpeg: {e}"))?;
+        .map_err(|e| tr!("Falha iniciando ffmpeg: {e}", "Couldn't start ffmpeg: {e}", "No se pudo iniciar ffmpeg: {e}"))?;
 
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
@@ -103,7 +103,7 @@ where
     let status = child
         .wait()
         .await
-        .map_err(|e| format!("Erro aguardando ffmpeg: {e}"))?;
+        .map_err(|e| tr!("Erro aguardando ffmpeg: {e}", "Error waiting for ffmpeg: {e}", "Error al esperar a ffmpeg: {e}"))?;
     let stderr_text = stderr_handle.await.unwrap_or_default();
 
     if !status.success() {
@@ -162,22 +162,22 @@ async fn measure_loudnorm_first_pass(
         OsString::from("-"),
     ];
     let child = spawn_in_job(job_group, ffmpeg_exe, &args, priority, None)
-        .map_err(|e| format!("Falha medindo loudnorm: {e}"))?;
+        .map_err(|e| tr!("Falha medindo loudnorm: {e}", "Couldn't measure loudnorm: {e}", "No se pudo medir loudnorm: {e}"))?;
     let out = child
         .wait_with_output()
         .await
-        .map_err(|e| format!("Erro no loudnorm 1ª passada: {e}"))?;
+        .map_err(|e| tr!("Erro no loudnorm 1ª passada: {e}", "Error in the loudnorm 1st pass: {e}", "Error en la 1.ª pasada de loudnorm: {e}"))?;
     let stderr = String::from_utf8_lossy(&out.stderr);
 
     // Extract the JSON object at the end of loudnorm output
     let start = stderr
         .rfind('{')
-        .ok_or_else(|| "JSON de medição loudnorm não encontrado.".to_string())?;
+        .ok_or_else(|| tr!("JSON de medição loudnorm não encontrado.", "loudnorm measurement JSON not found.", "No se encontró el JSON de medición de loudnorm."))?;
     let end = stderr
         .rfind('}')
-        .ok_or_else(|| "JSON de medição loudnorm incompleto.".to_string())?;
+        .ok_or_else(|| tr!("JSON de medição loudnorm incompleto.", "Incomplete loudnorm measurement JSON.", "JSON de medición de loudnorm incompleto."))?;
     serde_json::from_str::<LoudnormMeasurement>(&stderr[start..=end])
-        .map_err(|e| format!("Falha lendo medição loudnorm: {e}"))
+        .map_err(|e| tr!("Falha lendo medição loudnorm: {e}", "Couldn't read the loudnorm measurement: {e}", "No se pudo leer la medición de loudnorm: {e}"))
 }
 
 /// Ensures the requested Whisper GGML model (`base` or `small`) exists locally, downloading on demand with progress.
@@ -202,7 +202,7 @@ where
         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{filename}?download=true"
     );
     let tmp = dest.with_extension("bin.part");
-    on_progress(&format!("Baixando modelo Whisper ({clean})..."), 0.0);
+    on_progress(&tr!("Baixando modelo Whisper ({clean})...", "Downloading the Whisper model ({clean})...", "Descargando el modelo Whisper ({clean})..."), 0.0);
 
     let client = reqwest::Client::builder()
         .user_agent("Boladao-Desktop/1.0")
@@ -212,27 +212,27 @@ where
         .get(&url)
         .send()
         .await
-        .map_err(|e| format!("Erro baixando modelo Whisper: {e}"))?
+        .map_err(|e| tr!("Erro baixando modelo Whisper: {e}", "Error downloading the Whisper model: {e}", "Error al descargar el modelo Whisper: {e}"))?
         .error_for_status()
-        .map_err(|e| format!("Servidor de modelos retornou erro: {e}"))?;
+        .map_err(|e| tr!("Servidor de modelos retornou erro: {e}", "The model server returned an error: {e}", "El servidor de modelos devolvió un error: {e}"))?;
 
     let total = resp.content_length().unwrap_or(148 * 1024 * 1024);
-    let mut file = fs::File::create(&tmp).map_err(|e| format!("Erro criando {filename}: {e}"))?;
+    let mut file = fs::File::create(&tmp).map_err(|e| tr!("Erro criando {filename}: {e}", "Error creating {filename}: {e}", "Error al crear {filename}: {e}"))?;
     let mut stream = resp.bytes_stream();
     let mut downloaded = 0u64;
 
     while let Some(chunk_res) = stream.next().await {
-        let chunk = chunk_res.map_err(|e| format!("Download do modelo interrompido: {e}"))?;
+        let chunk = chunk_res.map_err(|e| tr!("Download do modelo interrompido: {e}", "Model download interrupted: {e}", "Descarga del modelo interrumpida: {e}"))?;
         file.write_all(&chunk).map_err(|e| e.to_string())?;
         downloaded += chunk.len() as u64;
         on_progress(
-            &format!("Baixando modelo Whisper ({clean})..."),
+            &tr!("Baixando modelo Whisper ({clean})...", "Downloading the Whisper model ({clean})...", "Descargando el modelo Whisper ({clean})..."),
             (downloaded as f64 / total as f64).clamp(0.0, 0.99),
         );
     }
     file.flush().map_err(|e| e.to_string())?;
     drop(file);
-    fs::rename(&tmp, &dest).map_err(|e| format!("Erro salvando modelo Whisper: {e}"))?;
+    fs::rename(&tmp, &dest).map_err(|e| tr!("Erro salvando modelo Whisper: {e}", "Error saving the Whisper model: {e}", "Error al guardar el modelo Whisper: {e}"))?;
     Ok(dest)
 }
 
@@ -366,7 +366,7 @@ where
         }
 
         if let Some(target_lufs) = ws.loudnorm_lufs {
-            on_stage_progress("Medindo volume (1ª passada)...", 0.15);
+            on_stage_progress(&tr!("Medindo volume (1ª passada)...", "Measuring loudness (1st pass)...", "Midiendo el volumen (1.ª pasada)..."), 0.15);
             let m =
                 measure_loudnorm_first_pass(job_group, &ff, &current_path, target_lufs, priority)
                     .await?;
@@ -417,9 +417,10 @@ where
         };
 
         let stage_label = if ws.loudnorm_lufs.is_some() && !needs_audio_format_conv {
-            "Normalizando volume".to_string()
+            tr!("Normalizando volume", "Normalizing loudness", "Normalizando el volumen")
         } else {
-            format!("Convertendo para {}", target_ext.to_ascii_uppercase())
+            let ext = target_ext.to_ascii_uppercase();
+            tr!("Convertendo para {ext}", "Converting to {ext}", "Convirtiendo a {ext}")
         };
 
         let out_final = current_path.with_extension(target_ext);
@@ -519,7 +520,7 @@ where
         // The processed file takes its place before the original is deleted, so a failed rename
         // never costs the download.
         fs::rename(&out_tmp, &out_final)
-            .map_err(|e| format!("Erro finalizando arquivo de áudio: {e}"))?;
+            .map_err(|e| tr!("Erro finalizando arquivo de áudio: {e}", "Error finishing the audio file: {e}", "Error al finalizar el archivo de audio: {e}"))?;
         if current_path != out_final {
             let _ = fs::remove_file(&current_path);
         }
@@ -606,7 +607,7 @@ where
             p1.push(OsString::from("NUL"));
 
             run_ffmpeg_with_progress(job_group, &ff, &p1, Some(dur), priority, |p| {
-                on_stage_progress("Comprimindo vídeo (1ª passada)...", p * 0.45);
+                on_stage_progress(&tr!("Comprimindo vídeo (1ª passada)...", "Compressing video (1st pass)...", "Comprimiendo video (1.ª pasada)..."), p * 0.45);
             })
             .await?;
 
@@ -639,7 +640,7 @@ where
             p2.push(out_tmp.as_os_str().to_os_string());
 
             let res = run_ffmpeg_with_progress(job_group, &ff, &p2, Some(dur), priority, |p| {
-                on_stage_progress("Comprimindo vídeo (2ª passada)...", 0.45 + p * 0.55);
+                on_stage_progress(&tr!("Comprimindo vídeo (2ª passada)...", "Compressing video (2nd pass)...", "Comprimiendo video (2.ª pasada)..."), 0.45 + p * 0.55);
             })
             .await;
 
@@ -688,13 +689,13 @@ where
             args.push(out_tmp.as_os_str().to_os_string());
 
             run_ffmpeg_with_progress(job_group, &ff, &args, duration_s, priority, |p| {
-                on_stage_progress("Recodificando vídeo...", p);
+                on_stage_progress(&tr!("Recodificando vídeo...", "Re-encoding video...", "Recodificando video..."), p);
             })
             .await?;
         }
 
         fs::rename(&out_tmp, &out_final)
-            .map_err(|e| format!("Erro salvando vídeo processado: {e}"))?;
+            .map_err(|e| tr!("Erro salvando vídeo processado: {e}", "Error saving the processed video: {e}", "Error al guardar el video procesado: {e}"))?;
         if current_path != out_final {
             let _ = fs::remove_file(&current_path);
         }
@@ -717,7 +718,7 @@ where
                 palette_path.as_os_str().to_os_string(),
             ];
             run_ffmpeg_with_progress(job_group, &ff, &p1, duration_s, priority, |p| {
-                on_stage_progress("Gerando paleta do GIF...", p * 0.4);
+                on_stage_progress(&tr!("Gerando paleta do GIF...", "Building the GIF palette...", "Generando la paleta del GIF..."), p * 0.4);
             })
             .await?;
 
@@ -733,7 +734,7 @@ where
                 gif_path.as_os_str().to_os_string(),
             ];
             let res = run_ffmpeg_with_progress(job_group, &ff, &p2, duration_s, priority, |p| {
-                on_stage_progress("Renderizando GIF...", 0.4 + p * 0.6);
+                on_stage_progress(&tr!("Renderizando GIF...", "Rendering GIF...", "Renderizando GIF..."), 0.4 + p * 0.6);
             })
             .await;
             let _ = fs::remove_file(&palette_path);
@@ -755,7 +756,7 @@ where
             png_path.as_os_str().to_os_string(),
         ];
         run_ffmpeg_with_progress(job_group, &ff, &args, Some(1.0), priority, |p| {
-            on_stage_progress("Extraindo frame PNG...", p);
+            on_stage_progress(&tr!("Extraindo frame PNG...", "Extracting PNG frame...", "Extrayendo fotograma PNG..."), p);
         })
         .await?;
         extra_outputs.push(png_path);
@@ -791,7 +792,7 @@ where
                 OsString::from("-"),
             ];
             run_ffmpeg_with_progress(job_group, &ff, &args, duration_s, priority, |p| {
-                on_stage_progress("Transcrevendo áudio (Whisper)...", 0.35 + p * 0.65);
+                on_stage_progress(&tr!("Transcrevendo áudio (Whisper)...", "Transcribing audio (Whisper)...", "Transcribiendo audio (Whisper)..."), 0.35 + p * 0.65);
             })
             .await?;
             if srt_path.is_file() {

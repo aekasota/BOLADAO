@@ -1,14 +1,14 @@
 {
   "name": "boladao",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Boladão — Downloader desktop em Rust + Tauri com yt-dlp, Deno e FFmpeg embutidos e visual Op-Art",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "tauri": "tauri",
     "build:installer": "powershell -ExecutionPolicy Bypass -File scripts/build-installer.ps1"
   },

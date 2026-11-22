@@ -296,8 +296,8 @@ pub fn builtin_presets(music_root: &PathBuf, video_root: &PathBuf) -> Vec<Preset
     vec![
         Preset {
             id: "audio-original".to_string(),
-            name: "Original (áudio)".to_string(),
-            description: "Mesma qualidade da fonte, sem reconversão (Opus/AAC).".to_string(),
+            name: tr!("Original (áudio)", "Original (audio)", "Original (audio)"),
+            description: tr!("Mesma qualidade da fonte, sem reconversão (Opus/AAC).", "Same quality as the source, no re-encoding (Opus/AAC).", "Misma calidad que la fuente, sin recodificar (Opus/AAC)."),
             builtin: true,
             spec: DownloadSpec {
                 mode: MediaMode::Audio,
@@ -310,7 +310,7 @@ pub fn builtin_presets(music_root: &PathBuf, video_root: &PathBuf) -> Vec<Preset
         Preset {
             id: "audio-mp3-v0".to_string(),
             name: "MP3 V0".to_string(),
-            description: "MP3 VBR máxima qualidade com capa quadrada e metadados.".to_string(),
+            description: tr!("MP3 VBR máxima qualidade com capa quadrada e metadados.", "Highest-quality VBR MP3 with a square cover and metadata.", "MP3 VBR de máxima calidad con portada cuadrada y metadatos."),
             builtin: true,
             spec: DownloadSpec {
                 mode: MediaMode::Audio,
@@ -324,7 +324,7 @@ pub fn builtin_presets(music_root: &PathBuf, video_root: &PathBuf) -> Vec<Preset
         Preset {
             id: "audio-wav-24-48".to_string(),
             name: "WAV 24-bit / 48 kHz".to_string(),
-            description: "PCM 24-bit/48 kHz reamostrado via SoXR para DAWs e editores.".to_string(),
+            description: tr!("PCM 24-bit/48 kHz reamostrado via SoXR para DAWs e editores.", "24-bit/48 kHz PCM resampled with SoXR for DAWs and editors.", "PCM 24-bit/48 kHz remuestreado con SoXR para DAW y editores."),
             builtin: true,
             spec: DownloadSpec {
                 mode: MediaMode::Audio,
@@ -339,8 +339,8 @@ pub fn builtin_presets(music_root: &PathBuf, video_root: &PathBuf) -> Vec<Preset
         },
         Preset {
             id: "video-compat-1080".to_string(),
-            name: "Vídeo compatível 1080p".to_string(),
-            description: "MP4 H.264 + AAC até 1080p. Abre no WhatsApp, Premiere e qualquer TV.".to_string(),
+            name: tr!("Vídeo compatível 1080p", "Compatible video 1080p", "Video compatible 1080p"),
+            description: tr!("MP4 H.264 + AAC até 1080p. Abre no WhatsApp, Premiere e qualquer TV.", "MP4 H.264 + AAC up to 1080p. Opens in WhatsApp, Premiere and any TV.", "MP4 H.264 + AAC hasta 1080p. Se abre en WhatsApp, Premiere y cualquier TV."),
             builtin: true,
             spec: DownloadSpec {
                 mode: MediaMode::Video,
@@ -353,8 +353,8 @@ pub fn builtin_presets(music_root: &PathBuf, video_root: &PathBuf) -> Vec<Preset
         },
         Preset {
             id: "video-max-mkv".to_string(),
-            name: "Vídeo máxima qualidade".to_string(),
-            description: "MKV mantendo AV1/VP9 + Opus até 4K/8K HDR sem reconverter.".to_string(),
+            name: tr!("Vídeo máxima qualidade", "Maximum-quality video", "Video de máxima calidad"),
+            description: tr!("MKV mantendo AV1/VP9 + Opus até 4K/8K HDR sem reconverter.", "MKV keeping AV1/VP9 + Opus up to 4K/8K HDR, no re-encoding.", "MKV que conserva AV1/VP9 + Opus hasta 4K/8K HDR sin recodificar."),
             builtin: true,
             spec: DownloadSpec {
                 mode: MediaMode::Video,
@@ -368,7 +368,7 @@ pub fn builtin_presets(music_root: &PathBuf, video_root: &PathBuf) -> Vec<Preset
         Preset {
             id: "video-reels-tiktok".to_string(),
             name: "Reels/TikTok (MP4)".to_string(),
-            description: "MP4 pronto pra compartilhar rápido.".to_string(),
+            description: tr!("MP4 pronto pra compartilhar rápido.", "MP4 ready to share quickly.", "MP4 listo para compartir rápido."),
             builtin: true,
             spec: DownloadSpec {
                 mode: MediaMode::Video,
@@ -381,8 +381,8 @@ pub fn builtin_presets(music_root: &PathBuf, video_root: &PathBuf) -> Vec<Preset
         },
         Preset {
             id: "video-clip-section".to_string(),
-            name: "Só o trecho".to_string(),
-            description: "Baixa apenas o intervalo marcado com corte preciso nos keyframes.".to_string(),
+            name: tr!("Só o trecho", "Just the section", "Solo el fragmento"),
+            description: tr!("Baixa apenas o intervalo marcado com corte preciso nos keyframes.", "Downloads only the marked range, cut precisely on keyframes.", "Descarga solo el intervalo marcado, con corte preciso en los fotogramas clave."),
             builtin: true,
             spec: DownloadSpec {
                 mode: MediaMode::Video,

@@ -132,13 +132,23 @@ pub fn normalize_url_for_dedup(raw: &str) -> Option<String> {
 /// Pure, sub-millisecond local URL classification (<1 ms, zero network).
 pub fn classify_url(raw: &str) -> Result<Classification, String> {
     let trimmed = raw.trim();
-    let parsed = Url::parse(trimmed).map_err(|_| "Link inválido. Use um endereço http:// ou https://.".to_string())?;
+    let parsed = Url::parse(trimmed).map_err(|_| {
+        tr!(
+            "Link inválido. Use um endereço http:// ou https://.",
+            "Invalid link. Use an http:// or https:// address.",
+            "Enlace no válido. Usa una dirección http:// o https://."
+        )
+    })?;
     if !matches!(parsed.scheme(), "http" | "https") {
-        return Err("Apenas links http:// e https:// são aceitos.".to_string());
+        return Err(tr!(
+            "Apenas links http:// e https:// são aceitos.",
+            "Only http:// and https:// links are accepted.",
+            "Solo se aceptan enlaces http:// y https://."
+        ));
     }
     let host = parsed
         .host_str()
-        .ok_or_else(|| "Link sem domínio válido.".to_string())?
+        .ok_or_else(|| tr!("Link sem domínio válido.", "The link has no valid domain.", "El enlace no tiene un dominio válido."))?
         .to_ascii_lowercase();
     let domain = host
         .strip_prefix("www.")
@@ -194,7 +204,11 @@ pub fn classify_url(raw: &str) -> Result<Classification, String> {
             has_video_and_playlist: false,
             requires_login_hint: false,
             is_drm: true,
-            drm_message: Some("Esse serviço usa DRM. O yt-dlp não baixa daqui.".to_string()),
+            drm_message: Some(tr!(
+                "Esse serviço usa DRM. O yt-dlp não baixa daqui.",
+                "This service uses DRM. yt-dlp can't download from it.",
+                "Este servicio usa DRM. yt-dlp no puede descargar de aquí."
+            )),
         });
     }
 

@@ -83,7 +83,7 @@ pub struct Progress {
 impl Default for Progress {
     fn default() -> Self {
         Self {
-            stage: "Na fila".to_string(),
+            stage: tr!("Na fila", "Queued", "En cola"),
             pct: 0.0,
             downloaded_bytes: 0,
             total_bytes: None,
@@ -137,7 +137,7 @@ impl Job {
     pub fn format_badge(&self) -> String {
         match self.spec.mode {
             MediaMode::Audio => match self.spec.audio_format {
-                AudioFormat::Original => "Áudio Original".to_string(),
+                AudioFormat::Original => tr!("Áudio Original", "Original Audio", "Audio original"),
                 AudioFormat::Mp3 => "MP3".to_string(),
                 AudioFormat::M4a => "M4A".to_string(),
                 AudioFormat::Opus => "Opus".to_string(),
@@ -151,7 +151,7 @@ impl Job {
                     .spec
                     .max_height
                     .map(|h| format!("{h}p "))
-                    .unwrap_or_else(|| "Máx ".to_string());
+                    .unwrap_or_else(|| tr!("Máx ", "Max ", "Máx "));
                 match self.spec.video_profile {
                     VideoProfile::Compatible => format!("{res}MP4"),
                     VideoProfile::MaxQuality => format!("{res}MKV"),
@@ -251,7 +251,7 @@ impl ProgressTracker {
         }
 
         if line.contains("Waiting for video") || line.contains("[wait]") {
-            current_progress.stage = "Aguardando estreia...".to_string();
+            current_progress.stage = tr!("Aguardando estreia...", "Waiting for the premiere...", "Esperando el estreno...");
             return Some(JobState::WaitingPremiere);
         }
 
@@ -395,12 +395,12 @@ impl ProgressTracker {
             .position(|k| k == &self.active_stream_key)
             .unwrap_or(0);
         out.stage = match self.mode {
-            MediaMode::Audio => "Baixando áudio".to_string(),
+            MediaMode::Audio => tr!("Baixando áudio", "Downloading audio", "Descargando audio"),
             MediaMode::Video => {
                 if cur_idx == 0 {
-                    "Baixando vídeo".to_string()
+                    tr!("Baixando vídeo", "Downloading video", "Descargando video")
                 } else {
-                    "Baixando áudio".to_string()
+                    tr!("Baixando áudio", "Downloading audio", "Descargando audio")
                 }
             }
         };
@@ -470,21 +470,21 @@ impl ProgressTracker {
 pub fn humanize_postprocessor_pt(pp: &str) -> String {
     let lower = pp.to_ascii_lowercase();
     if lower.contains("merger") || lower.contains("remux") || lower.contains("concat") {
-        "Juntando".to_string()
+        tr!("Juntando", "Merging", "Uniendo")
     } else if lower.contains("extractaudio") {
-        "Extraindo áudio".to_string()
+        tr!("Extraindo áudio", "Extracting audio", "Extrayendo audio")
     } else if lower.contains("thumbnail") {
-        "Colocando a capa".to_string()
+        tr!("Colocando a capa", "Adding the cover", "Añadiendo la portada")
     } else if lower.contains("sponsorblock") {
-        "Removendo patrocínio".to_string()
+        tr!("Removendo patrocínio", "Removing sponsor segments", "Quitando patrocinios")
     } else if lower.contains("splitchapters") {
-        "Dividindo capítulos".to_string()
+        tr!("Dividindo capítulos", "Splitting chapters", "Dividiendo capítulos")
     } else if lower.contains("metadata") || lower.contains("chapters") {
-        "Gravando metadados".to_string()
+        tr!("Gravando metadados", "Writing metadata", "Guardando metadatos")
     } else if lower.contains("subtitles") {
-        "Processando legendas".to_string()
+        tr!("Processando legendas", "Processing subtitles", "Procesando subtítulos")
     } else {
-        "Finalizando arquivo".to_string()
+        tr!("Finalizando arquivo", "Finishing file", "Finalizando archivo")
     }
 }
 
@@ -523,12 +523,20 @@ where
             job.finished_at = Some(Utc::now());
             job.error = Some(JobError {
                 code: "disk_full_preflight".to_string(),
-                message_pt: format!(
-                    "Não cabe: precisa de ~{} e tem {} livres em {drive}.",
-                    format_bytes_pt(needed),
-                    format_bytes_pt(free)
-                ),
-                hint_pt: Some("Troque a pasta de destino ou libere espaço no disco.".to_string()),
+                message_pt: {
+                    let need = format_bytes_pt(needed);
+                    let have = format_bytes_pt(free);
+                    tr!(
+                        "Não cabe: precisa de ~{need} e tem {have} livres em {drive}.",
+                        "Not enough space: needs ~{need} and {drive} has {have} free.",
+                        "No cabe: necesita ~{need} y hay {have} libres en {drive}."
+                    )
+                },
+                hint_pt: Some(tr!(
+                    "Troque a pasta de destino ou libere espaço no disco.",
+                    "Change the destination folder or free up disk space.",
+                    "Cambia la carpeta de destino o libera espacio en el disco."
+                )),
                 action: ErrorAction::ChangeDestination,
                 transient: false,
                 suggest_impersonate: false,
@@ -571,9 +579,9 @@ where
         job.equivalent_cmd = format_equivalent_command(&bins.ytdlp_exe(), &args, true);
         job.state = JobState::Downloading;
         job.progress.stage = if job.spec.mode == MediaMode::Audio {
-            "Baixando áudio".to_string()
+            tr!("Baixando áudio", "Downloading audio", "Descargando audio")
         } else {
-            "Baixando vídeo".to_string()
+            tr!("Baixando vídeo", "Downloading video", "Descargando video")
         };
         on_update(&job);
 
@@ -590,7 +598,7 @@ where
                 job.finished_at = Some(Utc::now());
                 job.error = Some(JobError {
                     code: "spawn_failed".to_string(),
-                    message_pt: format!("Falha iniciando yt-dlp: {e}"),
+                    message_pt: tr!("Falha iniciando yt-dlp: {e}", "Couldn't start yt-dlp: {e}", "No se pudo iniciar yt-dlp: {e}"),
                     hint_pt: None,
                     action: ErrorAction::Retry,
                     transient: true,
@@ -703,7 +711,8 @@ where
         job.state = JobState::Workshop;
         let primary = outputs[0].clone();
         let mut tracker = ProgressTracker::new(&job.spec);
-        tracker.apply_workshop_progress("Processando na oficina...", 0.02, &mut job.progress);
+        let stage = tr!("Processando na oficina...", "Processing in the Workshop...", "Procesando en el Taller...");
+        tracker.apply_workshop_progress(&stage, 0.02, &mut job.progress);
         on_update(&job);
 
         let mut last_ws_emit = Instant::now();
@@ -770,7 +779,7 @@ where
 
     job.outputs = outputs;
     job.state = JobState::Done;
-    job.progress.stage = "Concluído".to_string();
+    job.progress.stage = tr!("Concluído", "Done", "Completado");
     job.progress.pct = 1.0;
     job.progress.speed_bps = 0;
     job.progress.eta_s = Some(0);
@@ -785,7 +794,13 @@ pub fn format_bytes_pt(bytes: u64) -> String {
     const GB: f64 = MB * 1024.0;
     let b = bytes as f64;
     if b >= GB {
-        format!("{:.1} GB", b / GB).replace('.', ",")
+        let gb = format!("{:.1} GB", b / GB);
+        // English writes decimals with a point; Portuguese and Spanish with a comma.
+        if crate::i18n::current() == crate::i18n::Lang::En {
+            gb
+        } else {
+            gb.replace('.', ",")
+        }
     } else if b >= MB {
         format!("{:.0} MB", b / MB)
     } else {

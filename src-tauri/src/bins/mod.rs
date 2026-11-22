@@ -71,7 +71,7 @@ impl BinManager {
         let initial = BinsStatusPayload {
             ready: false,
             extracting: false,
-            stage: "Verificando motores...".to_string(),
+            stage: tr!("Verificando motores...", "Checking the engines...", "Comprobando los motores..."),
             component: None,
             progress_pct: 0.0,
             ytdlp_version: EMBEDDED_YTDLP_META.version.to_string(),
@@ -200,7 +200,7 @@ impl BinManager {
                 let mut st = self.state.write();
                 st.extracting = true;
                 st.ready = false;
-                st.stage = "Preparando os motores...".to_string();
+                st.stage = tr!("Preparando os motores...", "Preparing the engines...", "Preparando los motores...");
                 st.progress_pct = 0.02;
             }
             self.emit_state(app.as_ref());
@@ -228,7 +228,7 @@ impl BinManager {
                         &EMBEDDED_YTDLP_META,
                         &target,
                         "yt-dlp.exe",
-                        "Extraindo yt-dlp...",
+                        &tr!("Extraindo yt-dlp...", "Extracting yt-dlp...", "Extrayendo yt-dlp..."),
                         &mut extracted_so_far,
                         total_to_extract,
                         mgr,
@@ -246,7 +246,7 @@ impl BinManager {
                         &EMBEDDED_DENO_META,
                         &target,
                         "deno.exe",
-                        "Extraindo runtime Deno...",
+                        &tr!("Extraindo runtime Deno...", "Extracting the Deno runtime...", "Extrayendo el runtime de Deno..."),
                         &mut extracted_so_far,
                         total_to_extract,
                         mgr,
@@ -261,7 +261,7 @@ impl BinManager {
                         &EMBEDDED_FFMPEG_META,
                         &target,
                         "ffmpeg.exe",
-                        "Extraindo FFmpeg e FFprobe...",
+                        &tr!("Extraindo FFmpeg e FFprobe...", "Extracting FFmpeg and FFprobe...", "Extrayendo FFmpeg y FFprobe..."),
                         &mut extracted_so_far,
                         total_to_extract,
                         mgr,
@@ -272,7 +272,7 @@ impl BinManager {
                 Ok(())
             })
             .await
-            .map_err(|e| format!("Falha interna na extração: {e}"))??;
+            .map_err(|e| tr!("Falha interna na extração: {e}", "Internal extraction failure: {e}", "Fallo interno en la extracción: {e}"))??;
         }
 
         // Read installed versions & rollback availability
@@ -299,7 +299,7 @@ impl BinManager {
 
         {
             let mut st = self.state.write();
-            st.stage = "Detectando recursos de vídeo e áudio...".to_string();
+            st.stage = tr!("Detectando recursos de vídeo e áudio...", "Detecting video and audio features...", "Detectando funciones de video y audio...");
             st.progress_pct = 0.94;
             st.ytdlp_version = current_ytdlp;
             st.ytdlp_previous_version = prev_ytdlp;
@@ -434,7 +434,7 @@ impl BinManager {
         let (_, stdout, stderr) =
             run_hidden_output(&self.ytdlp_exe(), &args, ProcessPriority::BelowNormal)
                 .await
-                .map_err(|e| format!("Falha ao executar yt-dlp -v: {e}"))?;
+                .map_err(|e| tr!("Falha ao executar yt-dlp -v: {e}", "Couldn't run yt-dlp -v: {e}", "No se pudo ejecutar yt-dlp -v: {e}"))?;
         let combined = format!("{stdout}\n{stderr}");
         let relevant: Vec<&str> = combined
             .lines()
@@ -463,7 +463,7 @@ impl BinManager {
         let (code, stdout, stderr) =
             run_hidden_output(&self.ytdlp_exe(), &args, ProcessPriority::BelowNormal)
                 .await
-                .map_err(|e| format!("Falha listando extratores: {e}"))?;
+                .map_err(|e| tr!("Falha listando extratores: {e}", "Couldn't list the extractors: {e}", "No se pudieron listar los extractores: {e}"))?;
         if code != 0 {
             return Err(format!("yt-dlp retornou erro ({code}): {stderr}"));
         }
@@ -503,12 +503,12 @@ impl BinManager {
             .get(&url)
             .send()
             .await
-            .map_err(|e| format!("Sem conexão para checar atualização: {e}"))?
+            .map_err(|e| tr!("Sem conexão para checar atualização: {e}", "No connection to check for updates: {e}", "Sin conexión para buscar actualizaciones: {e}"))?
             .error_for_status()
-            .map_err(|e| format!("GitHub API respondeu com erro: {e}"))?
+            .map_err(|e| tr!("GitHub API respondeu com erro: {e}", "The GitHub API returned an error: {e}", "La API de GitHub respondió con un error: {e}"))?
             .json()
             .await
-            .map_err(|e| format!("Resposta inválida do GitHub: {e}"))?;
+            .map_err(|e| tr!("Resposta inválida do GitHub: {e}", "Invalid response from GitHub: {e}", "Respuesta no válida de GitHub: {e}"))?;
 
         let cur = self.state.read().ytdlp_version.clone();
         if compare_versions(&rel.tag_name, &cur) > 0 {
@@ -552,31 +552,31 @@ impl BinManager {
             .get(&api_url)
             .send()
             .await
-            .map_err(|e| format!("Erro consultando GitHub: {e}"))?
+            .map_err(|e| tr!("Erro consultando GitHub: {e}", "Error querying GitHub: {e}", "Error al consultar GitHub: {e}"))?
             .error_for_status()
-            .map_err(|e| format!("Erro na API do GitHub: {e}"))?
+            .map_err(|e| tr!("Erro na API do GitHub: {e}", "GitHub API error: {e}", "Error en la API de GitHub: {e}"))?
             .json()
             .await
-            .map_err(|e| format!("JSON inválido do GitHub: {e}"))?;
+            .map_err(|e| tr!("JSON inválido do GitHub: {e}", "Invalid JSON from GitHub: {e}", "JSON no válido de GitHub: {e}"))?;
 
         let zip_asset = rel
             .assets
             .iter()
             .find(|a| a.name == "yt-dlp_win.zip")
-            .ok_or_else(|| "Asset yt-dlp_win.zip não encontrado na release.".to_string())?;
+            .ok_or_else(|| tr!("Asset yt-dlp_win.zip não encontrado na release.", "yt-dlp_win.zip asset not found in the release.", "No se encontró yt-dlp_win.zip en la release."))?;
         let sums_asset = rel
             .assets
             .iter()
             .find(|a| a.name == "SHA2-256SUMS")
-            .ok_or_else(|| "Arquivo SHA2-256SUMS não encontrado na release.".to_string())?;
+            .ok_or_else(|| tr!("Arquivo SHA2-256SUMS não encontrado na release.", "SHA2-256SUMS file not found in the release.", "No se encontró el archivo SHA2-256SUMS en la release."))?;
 
         let sums_text = client
             .get(&sums_asset.browser_download_url)
             .send()
             .await
-            .map_err(|e| format!("Falha baixando SHA2-256SUMS: {e}"))?
+            .map_err(|e| tr!("Falha baixando SHA2-256SUMS: {e}", "Couldn't download SHA2-256SUMS: {e}", "No se pudo descargar SHA2-256SUMS: {e}"))?
             .error_for_status()
-            .map_err(|e| format!("Erro HTTP em SHA2-256SUMS: {e}"))?
+            .map_err(|e| tr!("Erro HTTP em SHA2-256SUMS: {e}", "HTTP error on SHA2-256SUMS: {e}", "Error HTTP en SHA2-256SUMS: {e}"))?
             .text()
             .await
             .map_err(|e| e.to_string())?;
@@ -593,15 +593,15 @@ impl BinManager {
                     None
                 }
             })
-            .ok_or_else(|| "Hash do yt-dlp_win.zip ausente em SHA2-256SUMS.".to_string())?;
+            .ok_or_else(|| tr!("Hash do yt-dlp_win.zip ausente em SHA2-256SUMS.", "yt-dlp_win.zip hash missing from SHA2-256SUMS.", "Falta el hash de yt-dlp_win.zip en SHA2-256SUMS."))?;
 
         let zip_bytes = client
             .get(&zip_asset.browser_download_url)
             .send()
             .await
-            .map_err(|e| format!("Falha baixando yt-dlp_win.zip: {e}"))?
+            .map_err(|e| tr!("Falha baixando yt-dlp_win.zip: {e}", "Couldn't download yt-dlp_win.zip: {e}", "No se pudo descargar yt-dlp_win.zip: {e}"))?
             .error_for_status()
-            .map_err(|e| format!("Erro HTTP baixando yt-dlp_win.zip: {e}"))?
+            .map_err(|e| tr!("Erro HTTP baixando yt-dlp_win.zip: {e}", "HTTP error downloading yt-dlp_win.zip: {e}", "Error HTTP al descargar yt-dlp_win.zip: {e}"))?
             .bytes()
             .await
             .map_err(|e| format!("Download interrompido: {e}"))?;
@@ -610,8 +610,10 @@ impl BinManager {
         hasher.update(&zip_bytes);
         let actual_sha = hex::encode(hasher.finalize());
         if actual_sha != expected_sha {
-            return Err(format!(
-                "Verificação SHA-256 falhou! Esperado {expected_sha}, recebido {actual_sha}."
+            return Err(tr!(
+                "Verificação SHA-256 falhou! Esperado {expected_sha}, recebido {actual_sha}.",
+                "SHA-256 check failed! Expected {expected_sha}, got {actual_sha}.",
+                "¡Falló la verificación SHA-256! Se esperaba {expected_sha} y se recibió {actual_sha}."
             ));
         }
 
@@ -649,7 +651,7 @@ impl BinManager {
 
             // Locate folder containing yt-dlp.exe in case zip had a wrapper subdir
             let actual_root = find_file_parent(&tmp_clone, "yt-dlp.exe")
-                .ok_or_else(|| "yt-dlp.exe ausente no zip baixado.".to_string())?;
+                .ok_or_else(|| tr!("yt-dlp.exe ausente no zip baixado.", "yt-dlp.exe missing from the downloaded zip.", "Falta yt-dlp.exe en el zip descargado."))?;
 
             if dest_clone.exists() {
                 let _ = fs::remove_dir_all(&dest_clone);
@@ -690,14 +692,18 @@ impl BinManager {
         let ytdlp_base = self.root_dir.join("ytdlp");
         let prev_path = ytdlp_base.join("previous.txt");
         let prev_ver = fs::read_to_string(&prev_path)
-            .map_err(|_| "Nenhuma versão anterior salva para restaurar.".to_string())?;
+            .map_err(|_| tr!("Nenhuma versão anterior salva para restaurar.", "No previous version saved to restore.", "No hay una versión anterior guardada para restaurar."))?;
         let prev_ver = prev_ver.trim().to_string();
         let prev_exe = ytdlp_base
             .join("versions")
             .join(&prev_ver)
             .join("yt-dlp.exe");
         if !prev_exe.is_file() {
-            return Err(format!("Binário da versão anterior ({prev_ver}) não está mais no disco."));
+            return Err(tr!(
+                "Binário da versão anterior ({prev_ver}) não está mais no disco.",
+                "The previous version binary ({prev_ver}) is no longer on disk.",
+                "El binario de la versión anterior ({prev_ver}) ya no está en el disco."
+            ));
         }
 
         write_atomic_text(&ytdlp_base.join("current.txt"), &prev_ver)?;
@@ -727,8 +733,8 @@ fn extract_tar_zst_atomic(
 ) -> Result<(), String> {
     let parent = dest_dir
         .parent()
-        .ok_or_else(|| "Caminho inválido para extração".to_string())?;
-    fs::create_dir_all(parent).map_err(|e| format!("Erro criando pasta pai: {e}"))?;
+        .ok_or_else(|| tr!("Caminho inválido para extração", "Invalid extraction path", "Ruta de extracción no válida"))?;
+    fs::create_dir_all(parent).map_err(|e| tr!("Erro criando pasta pai: {e}", "Error creating the parent folder: {e}", "Error al crear la carpeta superior: {e}"))?;
 
     let sibling_tmp = parent.join(format!(
         "{}.extracting-{}",
@@ -738,7 +744,7 @@ fn extract_tar_zst_atomic(
     if sibling_tmp.exists() {
         let _ = fs::remove_dir_all(&sibling_tmp);
     }
-    fs::create_dir_all(&sibling_tmp).map_err(|e| format!("Erro criando pasta temp: {e}"))?;
+    fs::create_dir_all(&sibling_tmp).map_err(|e| tr!("Erro criando pasta temp: {e}", "Error creating the temp folder: {e}", "Error al crear la carpeta temporal: {e}"))?;
 
     {
         let mut st = mgr.state.write();
@@ -748,35 +754,47 @@ fn extract_tar_zst_atomic(
     mgr.emit_state(app);
 
     let decoder = zstd::stream::read::Decoder::new(BufReader::new(compressed))
-        .map_err(|e| format!("Erro abrindo zstd {}: {e}", meta.key))?;
+        .map_err(|e| {
+                let key = &meta.key;
+                tr!("Erro abrindo zstd {key}: {e}", "Error opening zstd {key}: {e}", "Error al abrir zstd {key}: {e}")
+            })?;
     let mut archive = tar::Archive::new(decoder);
     let entries = archive
         .entries()
-        .map_err(|e| format!("Erro lendo tar {}: {e}", meta.key))?;
+        .map_err(|e| {
+                let key = &meta.key;
+                tr!("Erro lendo tar {key}: {e}", "Error reading tar {key}: {e}", "Error al leer tar {key}: {e}")
+            })?;
 
     let mut last_emit_bytes = *extracted_so_far;
     for entry_res in entries {
         let mut entry = entry_res.map_err(|e| format!("Entrada tar corrompida: {e}"))?;
         let rel_path = entry
             .path()
-            .map_err(|e| format!("Caminho tar inválido: {e}"))?
+            .map_err(|e| tr!("Caminho tar inválido: {e}", "Invalid tar path: {e}", "Ruta tar no válida: {e}"))?
             .into_owned();
         let out_path = sibling_tmp.join(&rel_path);
         if let Some(p) = out_path.parent() {
-            fs::create_dir_all(p).map_err(|e| format!("Erro criando diretório: {e}"))?;
+            fs::create_dir_all(p).map_err(|e| tr!("Erro criando diretório: {e}", "Error creating the directory: {e}", "Error al crear el directorio: {e}"))?;
         }
         let mut out_file =
-            File::create(&out_path).map_err(|e| format!("Erro criando {}: {e}", out_path.display()))?;
+            File::create(&out_path).map_err(|e| {
+                let path = out_path.display();
+                tr!("Erro criando {path}: {e}", "Error creating {path}: {e}", "Error al crear {path}: {e}")
+            })?;
         let mut buf = [0u8; 64 * 1024];
         loop {
             let n = entry
                 .read(&mut buf)
-                .map_err(|e| format!("Erro descomprimindo {}: {e}", meta.key))?;
+                .map_err(|e| {
+                let key = &meta.key;
+                tr!("Erro descomprimindo {key}: {e}", "Error decompressing {key}: {e}", "Error al descomprimir {key}: {e}")
+            })?;
             if n == 0 {
                 break;
             }
             std::io::Write::write_all(&mut out_file, &buf[..n])
-                .map_err(|e| format!("Erro gravando em disco: {e}"))?;
+                .map_err(|e| tr!("Erro gravando em disco: {e}", "Error writing to disk: {e}", "Error al escribir en el disco: {e}"))?;
             *extracted_so_far += n as u64;
             if *extracted_so_far - last_emit_bytes >= 3 * 1024 * 1024 {
                 last_emit_bytes = *extracted_so_far;
@@ -793,7 +811,7 @@ fn extract_tar_zst_atomic(
 
     let main_exe_path = sibling_tmp.join(main_exe_name);
     let main_exe_bytes = fs::metadata(&main_exe_path)
-        .map_err(|e| format!("Executável principal {main_exe_name} ausente após extração: {e}"))?
+        .map_err(|e| tr!("Executável principal {main_exe_name} ausente após extração: {e}", "Main executable {main_exe_name} missing after extraction: {e}", "Falta el ejecutable principal {main_exe_name} después de la extracción: {e}"))?
         .len();
 
     let installed = InstalledManifest {
@@ -806,7 +824,7 @@ fn extract_tar_zst_atomic(
     };
     let manifest_json = serde_json::to_string_pretty(&installed).map_err(|e| e.to_string())?;
     fs::write(sibling_tmp.join(".manifest.json"), manifest_json)
-        .map_err(|e| format!("Erro gravando manifest: {e}"))?;
+        .map_err(|e| tr!("Erro gravando manifest: {e}", "Error writing the manifest: {e}", "Error al escribir el manifiesto: {e}"))?;
 
     if dest_dir.exists() {
         let backup = parent.join(format!(
@@ -816,13 +834,20 @@ fn extract_tar_zst_atomic(
         ));
         let _ = fs::remove_dir_all(&backup);
         fs::rename(dest_dir, &backup)
-            .map_err(|e| format!("Binário em uso, não foi possível substituir {}: {e}", dest_dir.display()))?;
+            .map_err(|e| {
+                let dir = dest_dir.display();
+                tr!(
+                    "Binário em uso, não foi possível substituir {dir}: {e}",
+                    "Binary in use, couldn't replace {dir}: {e}",
+                    "Binario en uso, no se pudo reemplazar {dir}: {e}"
+                )
+            })?;
         fs::rename(&sibling_tmp, dest_dir)
-            .map_err(|e| format!("Erro movendo pasta extraída: {e}"))?;
+            .map_err(|e| tr!("Erro movendo pasta extraída: {e}", "Error moving the extracted folder: {e}", "Error al mover la carpeta extraída: {e}"))?;
         let _ = fs::remove_dir_all(&backup);
     } else {
         fs::rename(&sibling_tmp, dest_dir)
-            .map_err(|e| format!("Erro ativando pasta extraída: {e}"))?;
+            .map_err(|e| tr!("Erro ativando pasta extraída: {e}", "Error activating the extracted folder: {e}", "Error al activar la carpeta extraída: {e}"))?;
     }
 
     Ok(())
@@ -830,10 +855,16 @@ fn extract_tar_zst_atomic(
 
 fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
     let tmp = path.with_extension(format!("tmp-{}", std::process::id()));
-    fs::write(&tmp, content).map_err(|e| format!("Erro escrevendo {}: {e}", tmp.display()))?;
+    fs::write(&tmp, content).map_err(|e| {
+        let path = tmp.display();
+        tr!("Erro escrevendo {path}: {e}", "Error writing {path}: {e}", "Error al escribir {path}: {e}")
+    })?;
     // `fs::rename` replaces the old file in one step; deleting it first would open a window in
     // which a crash leaves no file at all.
-    fs::rename(&tmp, path).map_err(|e| format!("Erro movendo {}: {e}", path.display()))
+    fs::rename(&tmp, path).map_err(|e| {
+        let path = path.display();
+        tr!("Erro movendo {path}: {e}", "Error moving {path}: {e}", "Error al mover {path}: {e}")
+    })
 }
 
 fn find_file_parent(dir: &Path, target_file: &str) -> Option<PathBuf> {

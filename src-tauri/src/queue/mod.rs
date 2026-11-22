@@ -96,7 +96,7 @@ impl QueueManager {
         for j in &mut loaded_jobs {
             if j.state.is_active() {
                 j.state = JobState::Queued;
-                j.progress.stage = "Na fila (retomando)".to_string();
+                j.progress.stage = tr!("Na fila (retomando)", "Queued (resuming)", "En cola (reanudando)");
                 j.progress.speed_bps = 0;
                 j.progress.eta_s = None;
                 let _ = persist_job_row(&conn, j);
@@ -170,7 +170,13 @@ impl QueueManager {
         if cls.is_drm {
             return Err(cls
                 .drm_message
-                .unwrap_or_else(|| "Esse serviço usa DRM. O yt-dlp não baixa daqui.".to_string()));
+                .unwrap_or_else(|| {
+                tr!(
+                    "Esse serviço usa DRM. O yt-dlp não baixa daqui.",
+                    "This service uses DRM. yt-dlp can't download from it.",
+                    "Este servicio usa DRM. yt-dlp no puede descargar de aquí."
+                )
+            }));
         }
 
         let dedup_key = normalize_url_for_dedup(&req.url).unwrap_or_else(|| cls.normalized_url.clone());
@@ -269,7 +275,7 @@ impl QueueManager {
         high_priority: bool,
     ) -> Result<Vec<Job>, String> {
         if items.is_empty() {
-            return Err("Nenhum item selecionado na playlist.".to_string());
+            return Err(tr!("Nenhum item selecionado na playlist.", "No playlist items selected.", "No hay elementos seleccionados en la playlist."));
         }
         let base_cls = classify_url(&platform_url)?;
         let gid = Uuid::new_v4();
@@ -358,7 +364,7 @@ impl QueueManager {
             if matches!(j.state, JobState::Paused | JobState::Failed) {
                 j.state = JobState::Queued;
                 j.error = None;
-                j.progress.stage = "Na fila".to_string();
+                j.progress.stage = tr!("Na fila", "Queued", "En cola");
             }
         });
         self.wake_scheduler();
@@ -413,7 +419,7 @@ impl QueueManager {
             j.state = JobState::Queued;
             j.attempts = 0;
             j.error = None;
-            j.progress.stage = "Na fila".to_string();
+            j.progress.stage = tr!("Na fila", "Queued", "En cola");
             j.progress.speed_bps = 0;
             j.progress.eta_s = None;
         });
@@ -726,7 +732,7 @@ impl QueueManager {
                     _ => 30,
                 };
                 let mut retry_job = finished_job.clone();
-                retry_job.progress.stage = format!("Tentando de novo em {delay_s} s...");
+                retry_job.progress.stage = tr!("Tentando de novo em {delay_s} s...", "Retrying in {delay_s} s...", "Reintentando en {delay_s} s...");
                 self.replace_and_persist(&retry_job);
                 self.emit_queue_changed();
 
@@ -807,7 +813,7 @@ impl QueueManager {
                     let _ = app
                         .notification()
                         .builder()
-                        .title("Falha no download")
+                        .title(tr!("Falha no download", "Download failed", "Error en la descarga"))
                         .body(format!("{}: {}", finished_job.title, err.message_pt))
                         .show();
                 }
@@ -893,8 +899,8 @@ impl QueueManager {
                 let _ = app
                     .notification()
                     .builder()
-                    .title("Downloads concluídos")
-                    .body(format!("{count} downloads concluídos."))
+                    .title(tr!("Downloads concluídos", "Downloads finished", "Descargas completadas"))
+                    .body(tr!("{count} downloads concluídos.", "{count} downloads finished.", "{count} descargas completadas."))
                     .show();
             }
         } else {
@@ -904,7 +910,7 @@ impl QueueManager {
                 let _ = app
                     .notification()
                     .builder()
-                    .title("Download concluído")
+                    .title(tr!("Download concluído", "Download finished", "Descarga completada"))
                     .body(title)
                     .show();
             }
@@ -988,7 +994,7 @@ fn persist_job_row(conn: &Connection, job: &Job) -> Result<(), String> {
             json
         ],
     )
-    .map_err(|e| format!("Erro persistindo fila: {e}"))?;
+    .map_err(|e| tr!("Erro persistindo fila: {e}", "Error saving the queue: {e}", "Error al guardar la cola: {e}"))?;
     Ok(())
 }
 

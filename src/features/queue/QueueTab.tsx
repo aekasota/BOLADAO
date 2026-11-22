@@ -26,6 +26,7 @@ import {
 import { useAppStore } from "../../stores/appStore";
 import { useQueueStore } from "../../stores/queueStore";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { useT } from "../../i18n";
 import {
   Button,
   PlatformIcon,
@@ -64,6 +65,7 @@ const AnimatedDoneCheck: React.FC = () => (
 );
 
 export const QueueTab: React.FC = () => {
+  const t = useT();
   const jobs = useQueueStore((s) => s.jobs);
   const selectedIds = useQueueStore((s) => s.selectedIds);
   const expandedId = useQueueStore((s) => s.expandedId);
@@ -115,7 +117,7 @@ export const QueueTab: React.FC = () => {
     for (const j of jobs) {
       if (!j.group_id) continue;
       const prev = map.get(j.group_id) || {
-        title: j.group_title || "Playlist",
+        title: j.group_title || t.queue.playlistFallback,
         total: 0,
         done: 0,
         pctSum: 0,
@@ -126,7 +128,7 @@ export const QueueTab: React.FC = () => {
       map.set(j.group_id, prev);
     }
     return map;
-  }, [jobs]);
+  }, [jobs, t]);
 
   const changeConcurrency = async (delta: number) => {
     const next = Math.max(1, Math.min(6, settings.global_concurrency + delta));
@@ -204,8 +206,8 @@ export const QueueTab: React.FC = () => {
               <div
                 title={
                   job.state === "done" && primaryOut
-                    ? "Arraste para fora (Explorer, Premiere, DAW)"
-                    : "Arraste para reordenar na fila"
+                    ? t.queue.dragOut
+                    : t.queue.dragReorder
                 }
                 onMouseDown={(e) => {
                   if (job.state === "done" && primaryOut) {
@@ -300,7 +302,7 @@ export const QueueTab: React.FC = () => {
                 >
                   <span>
                     {job.state === "failed"
-                      ? job.error?.message_pt || "Falha no download"
+                      ? job.error?.message_pt || t.queue.failedFallback
                       : job.progress.stage}
                   </span>
                   <div
@@ -311,7 +313,7 @@ export const QueueTab: React.FC = () => {
                       <span>{formatSpeedPrimary(job.progress.speed_bps, settings.speed_unit)}</span>
                     )}
                     {isActive && job.progress.eta_s !== null && (
-                      <span>ETA {formatEta(job.progress.eta_s)}</span>
+                      <span>{t.queue.eta(formatEta(job.progress.eta_s))}</span>
                     )}
                     <span>
                       {job.progress.approximate ? "~" : ""}
@@ -328,37 +330,37 @@ export const QueueTab: React.FC = () => {
                 style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}
               >
                 {(isActive || job.state === "queued") && (
-                  <Button size="sm" variant="secondary" onClick={() => api.pause(job.id)} title="Pausar">
+                  <Button size="sm" variant="secondary" onClick={() => api.pause(job.id)} title={t.queue.pause}>
                     <Pause size={13} />
                   </Button>
                 )}
                 {job.state === "paused" && (
-                  <Button size="sm" variant="secondary" onClick={() => api.resume(job.id)} title="Retomar">
+                  <Button size="sm" variant="secondary" onClick={() => api.resume(job.id)} title={t.queue.resume}>
                     <Play size={13} />
                   </Button>
                 )}
                 {job.state === "failed" && (
-                  <Button size="sm" variant="warn" onClick={() => api.retry(job.id)} title="Tentar de novo">
+                  <Button size="sm" variant="warn" onClick={() => api.retry(job.id)} title={t.queue.retry}>
                     <RotateCcw size={13} />
                   </Button>
                 )}
                 {job.state === "done" && primaryOut && (
                   <>
-                    <Button size="sm" variant="secondary" onClick={() => api.openFile(primaryOut)} title="Abrir arquivo">
+                    <Button size="sm" variant="secondary" onClick={() => api.openFile(primaryOut)} title={t.queue.openFile}>
                       <ExternalLink size={13} />
                     </Button>
                     <Button
                       size="sm"
                       variant="secondary"
                       onClick={() => api.revealInExplorer(primaryOut)}
-                      title="Mostrar na pasta"
+                      title={t.queue.showInFolder}
                     >
                       <FolderOpen size={13} />
                     </Button>
                   </>
                 )}
                 {!["done", "canceled"].includes(job.state) && (
-                  <Button size="sm" variant="ghost" onClick={() => api.cancel(job.id)} title="Cancelar">
+                  <Button size="sm" variant="ghost" onClick={() => api.cancel(job.id)} title={t.queue.cancel}>
                     <X size={14} />
                   </Button>
                 )}
@@ -366,7 +368,7 @@ export const QueueTab: React.FC = () => {
                   size="sm"
                   variant="ghost"
                   onClick={() => setExpandedId(job.id)}
-                  title="Detalhes e log"
+                  title={t.queue.details}
                 >
                   {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </Button>
@@ -419,7 +421,7 @@ export const QueueTab: React.FC = () => {
                           variant="warn"
                           onClick={() => setActiveTab("settings", "accounts")}
                         >
-                          Conectar conta
+                          {t.queue.connectAccount}
                         </Button>
                       )}
                       {job.error.action.type === "update_ytdlp" && (
@@ -431,7 +433,7 @@ export const QueueTab: React.FC = () => {
                             await api.retry(job.id);
                           }}
                         >
-                          Atualizar yt-dlp e tentar de novo
+                          {t.queue.updateYtdlpRetry}
                         </Button>
                       )}
                       {(job.error.action.type === "change_format" ||
@@ -444,11 +446,11 @@ export const QueueTab: React.FC = () => {
                             setActiveTab("download");
                           }}
                         >
-                          Ajustar opções
+                          {t.queue.adjustOptions}
                         </Button>
                       )}
                       <Button size="sm" variant="secondary" onClick={() => api.retry(job.id)}>
-                        Tentar de novo
+                        {t.queue.retry}
                       </Button>
                     </div>
                   </div>
@@ -456,15 +458,15 @@ export const QueueTab: React.FC = () => {
 
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                   <span className="font-mono-num" style={{ fontSize: 11, color: "var(--text-2)" }}>
-                    Destino: {job.outputs[0] || job.spec.output_root}
+                    {t.queue.destination(job.outputs[0] || job.spec.output_root)}
                   </span>
                   <div style={{ display: "flex", gap: 6 }}>
                     <Button size="sm" variant="secondary" onClick={() => copyCommand(job)}>
                       <Copy size={12} />{" "}
-                      {copiedId === job.id ? "Copiado!" : "Copiar comando equivalente"}
+                      {copiedId === job.id ? t.queue.copied : t.queue.copyCommand}
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => api.removeJobs([job.id])}>
-                      <Trash2 size={12} /> Remover da lista
+                      <Trash2 size={12} /> {t.queue.removeFromList}
                     </Button>
                   </div>
                 </div>
@@ -501,19 +503,19 @@ export const QueueTab: React.FC = () => {
           >
             {[
               primaryOut && {
-                label: "Abrir arquivo",
+                label: t.queue.openFile,
                 onSelect: () => api.openFile(primaryOut),
               },
               primaryOut && {
-                label: "Mostrar na pasta",
+                label: t.queue.showInFolder,
                 onSelect: () => api.revealInExplorer(primaryOut),
               },
               {
-                label: "Copiar comando equivalente",
+                label: t.queue.copyCommand,
                 onSelect: () => copyCommand(job),
               },
               {
-                label: "Remover da fila",
+                label: t.queue.removeFromQueue,
                 onSelect: () =>
                   api.removeJobs(selectedIds.includes(job.id) ? selectedIds : [job.id]),
               },
@@ -580,7 +582,7 @@ export const QueueTab: React.FC = () => {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 13, color: "var(--text-2)" }}>Downloads simultâneos:</span>
+            <span style={{ fontSize: 13, color: "var(--text-2)" }}>{t.queue.concurrency}</span>
             <Button size="sm" variant="secondary" onClick={() => changeConcurrency(-1)}>
               <Minus size={12} />
             </Button>
@@ -594,13 +596,13 @@ export const QueueTab: React.FC = () => {
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button size="sm" variant="secondary" onClick={() => api.pauseAll()}>
-              <Pause size={13} /> Pausar tudo
+              <Pause size={13} /> {t.queue.pauseAll}
             </Button>
             <Button size="sm" variant="secondary" onClick={() => api.resumeAll()}>
-              <Play size={13} /> Retomar tudo
+              <Play size={13} /> {t.queue.resumeAll}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => api.clearCompleted()}>
-              <Trash2 size={13} /> Limpar concluídos
+              <Trash2 size={13} /> {t.queue.clearDone}
             </Button>
           </div>
         </div>
@@ -620,7 +622,7 @@ export const QueueTab: React.FC = () => {
           >
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 700 }}>
-                Playlist: {g.title} ({g.done}/{g.total} concluídos)
+                {t.queue.playlistSummary(g.title, g.done, g.total)}
               </div>
               <div style={{ marginTop: 6 }}>
                 <StripeProgress
@@ -633,10 +635,10 @@ export const QueueTab: React.FC = () => {
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               <Button size="sm" variant="secondary" onClick={() => api.pauseGroup(gid)}>
-                Pausar grupo
+                {t.queue.pauseGroup}
               </Button>
               <Button size="sm" variant="secondary" onClick={() => api.resumeGroup(gid)}>
-                Retomar grupo
+                {t.queue.resumeGroup}
               </Button>
             </div>
           </div>
@@ -656,18 +658,18 @@ export const QueueTab: React.FC = () => {
             }}
           >
             <div style={{ fontSize: 16, color: "var(--text-2)" }}>
-              Nada na fila. Cola um link lá em cima.
+              {t.queue.empty}
             </div>
             <Button variant="primary" onClick={() => setActiveTab("download")}>
-              Ir para Baixar
+              {t.queue.goToDownload}
             </Button>
           </div>
         ) : (
           <>
-            {renderGroupBlock("Ativos", sections.active)}
-            {renderGroupBlock("Falhas", sections.failed)}
-            {renderGroupBlock("Esperando", sections.waiting)}
-            {renderGroupBlock("Concluídos hoje", sections.doneToday)}
+            {renderGroupBlock(t.queue.groups.active, sections.active)}
+            {renderGroupBlock(t.queue.groups.failed, sections.failed)}
+            {renderGroupBlock(t.queue.groups.waiting, sections.waiting)}
+            {renderGroupBlock(t.queue.groups.doneToday, sections.doneToday)}
           </>
         )}
       </div>

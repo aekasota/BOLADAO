@@ -16,8 +16,10 @@ import { api, LibraryEntry, MediaMode } from "../../lib/ipc";
 import { formatBytes, formatDuration } from "../../lib/format";
 import { useAppStore } from "../../stores/appStore";
 import { Button, Chip, Segmented, Toggle } from "../../ui/Primitives";
+import { formatDecimal, useT } from "../../i18n";
 
 export const LibraryTab: React.FC = () => {
+  const t = useT();
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const setPendingUrlToLoad = useAppStore((s) => s.setPendingUrlToLoad);
 
@@ -48,8 +50,8 @@ export const LibraryTab: React.FC = () => {
   };
 
   useEffect(() => {
-    const t = setTimeout(reload, 120);
-    return () => clearTimeout(t);
+    const timer = setTimeout(reload, 120);
+    return () => clearTimeout(timer);
   }, [search, modeFilter]);
 
   const handleGenerateSpectrogram = async (entry: LibraryEntry) => {
@@ -128,7 +130,7 @@ export const LibraryTab: React.FC = () => {
               />
               <input
                 className="op-input"
-                placeholder="Buscar por título, canal, artista ou plataforma..."
+                placeholder={t.library.searchPlaceholder}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 style={{ width: "100%", height: 34, padding: "0 10px 0 32px", fontSize: 13 }}
@@ -140,9 +142,9 @@ export const LibraryTab: React.FC = () => {
               value={modeFilter}
               onChange={setModeFilter}
               options={[
-                { value: "all", label: "Tudo" },
-                { value: "audio", label: "Áudio" },
-                { value: "video", label: "Vídeo" },
+                { value: "all", label: t.library.filterAll },
+                { value: "audio", label: t.library.filterAudio },
+                { value: "video", label: t.library.filterVideo },
               ]}
             />
           </div>
@@ -152,7 +154,7 @@ export const LibraryTab: React.FC = () => {
               className="op-panel"
               style={{ padding: "56px 24px", textAlign: "center", color: "var(--text-2)" }}
             >
-              Nenhum arquivo na Biblioteca ainda.
+              {t.library.empty}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -177,8 +179,8 @@ export const LibraryTab: React.FC = () => {
                       <div
                         title={
                           entry.file_exists
-                            ? "Arraste o arquivo para fora do app"
-                            : "Arquivo não encontrado"
+                            ? t.library.dragOut
+                            : t.library.missing
                         }
                         onMouseDown={(e) => {
                           if (entry.file_exists) {
@@ -255,12 +257,12 @@ export const LibraryTab: React.FC = () => {
                           {entry.details.integrated_lufs != null && (
                             <span className="font-mono-num">
                               {" "}
-                              · {entry.details.integrated_lufs.toFixed(1)} LUFS
+                              · {formatDecimal(entry.details.integrated_lufs, 1)} LUFS
                             </span>
                           )}
                           {!entry.file_exists && (
                             <span style={{ color: "var(--warn)", marginLeft: 8 }}>
-                              · Arquivo não encontrado
+                              · {t.library.missing}
                             </span>
                           )}
                         </div>
@@ -282,7 +284,7 @@ export const LibraryTab: React.FC = () => {
                         {/* The PNG is used only as an alpha mask so the waveform follows the theme accent. */}
                         <div
                           role="img"
-                          aria-label="Forma de onda do áudio"
+                          aria-label={t.library.waveformAlt}
                           style={{
                             width: "100%",
                             height: "100%",
@@ -335,11 +337,11 @@ export const LibraryTab: React.FC = () => {
                 rowGap: 5,
               }}
             >
-              <span style={{ color: "var(--text-3)" }}>Contêiner:</span>
+              <span style={{ color: "var(--text-3)" }}>{t.library.fields.container}</span>
               <span>{selected.details.container_format || "—"}</span>
               {selected.details.video_codec && (
                 <>
-                  <span style={{ color: "var(--text-3)" }}>Vídeo:</span>
+                  <span style={{ color: "var(--text-3)" }}>{t.library.fields.video}</span>
                   <span>
                     {selected.details.video_codec}{" "}
                     {selected.details.width && selected.details.height
@@ -352,11 +354,11 @@ export const LibraryTab: React.FC = () => {
               )}
               {selected.details.audio_codec && (
                 <>
-                  <span style={{ color: "var(--text-3)" }}>Áudio:</span>
+                  <span style={{ color: "var(--text-3)" }}>{t.library.fields.audio}</span>
                   <span>
                     {selected.details.audio_codec}
                     {selected.details.sample_rate_hz
-                      ? ` · ${(selected.details.sample_rate_hz / 1000).toFixed(1)} kHz`
+                      ? ` · ${formatDecimal(selected.details.sample_rate_hz / 1000, 1)} kHz`
                       : ""}
                     {selected.details.bits_per_sample
                       ? ` · ${selected.details.bits_per_sample}-bit`
@@ -365,23 +367,23 @@ export const LibraryTab: React.FC = () => {
                   </span>
                 </>
               )}
-              <span style={{ color: "var(--text-3)" }}>Duração:</span>
+              <span style={{ color: "var(--text-3)" }}>{t.library.fields.duration}</span>
               <span>{formatDuration(selected.details.duration_s)}</span>
-              <span style={{ color: "var(--text-3)" }}>Bitrate:</span>
+              <span style={{ color: "var(--text-3)" }}>{t.library.fields.bitrate}</span>
               <span>
                 {selected.details.overall_bitrate_kbps
                   ? `${selected.details.overall_bitrate_kbps} kbps`
                   : "—"}
               </span>
-              <span style={{ color: "var(--text-3)" }}>Loudness:</span>
+              <span style={{ color: "var(--text-3)" }}>{t.library.fields.loudness}</span>
               <span>
                 {selected.details.integrated_lufs != null
-                  ? `${selected.details.integrated_lufs.toFixed(1)} LUFS`
+                  ? `${formatDecimal(selected.details.integrated_lufs, 1)} LUFS`
                   : "—"}
               </span>
               {selected.details.cover_dimensions && (
                 <>
-                  <span style={{ color: "var(--text-3)" }}>Capa:</span>
+                  <span style={{ color: "var(--text-3)" }}>{t.library.fields.cover}</span>
                   <span>
                     {selected.details.cover_dimensions[0]}×
                     {selected.details.cover_dimensions[1]} px
@@ -397,7 +399,7 @@ export const LibraryTab: React.FC = () => {
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <img
                       src={selected.spectrogram_url}
-                      alt="Espectrograma de frequências"
+                      alt={t.library.spectrogramAlt}
                       style={{
                         width: "100%",
                         borderRadius: 6,
@@ -426,7 +428,7 @@ export const LibraryTab: React.FC = () => {
                     onClick={() => handleGenerateSpectrogram(selected)}
                   >
                     <Activity size={13} />{" "}
-                    {loadingSpec ? "Gerando espectrograma..." : "Ver espectrograma de qualidade"}
+                    {loadingSpec ? t.library.generatingSpectrogram : t.library.showSpectrogram}
                   </Button>
                 )}
               </div>
@@ -455,21 +457,21 @@ export const LibraryTab: React.FC = () => {
                     variant="primary"
                     onClick={() => api.openFile(selected.primary_path)}
                   >
-                    <ExternalLink size={13} /> Abrir
+                    <ExternalLink size={13} /> {t.library.open}
                   </Button>
                   <Button
                     size="sm"
                     variant="secondary"
                     onClick={() => api.revealInExplorer(selected.primary_path)}
                   >
-                    <FolderOpen size={13} /> Mostrar na pasta
+                    <FolderOpen size={13} /> {t.library.showInFolder}
                   </Button>
                   <Button
                     size="sm"
                     variant="secondary"
                     onClick={() => setWsOpen((v) => !v)}
                   >
-                    <Wrench size={13} /> Abrir na oficina
+                    <Wrench size={13} /> {t.library.openInWorkshop}
                   </Button>
                 </>
               )}
@@ -482,7 +484,7 @@ export const LibraryTab: React.FC = () => {
                 }}
               >
                 <RefreshCw size={13} />{" "}
-                {selected.is_playlist_origin ? "Sincronizar / Outro formato" : "Baixar em outro formato"}
+                {selected.is_playlist_origin ? t.library.syncOrOther : t.library.downloadOther}
               </Button>
               <Button
                 size="sm"
@@ -495,7 +497,7 @@ export const LibraryTab: React.FC = () => {
                   }
                 }}
               >
-                <Copy size={13} /> {copiedCmd ? "Copiado!" : "Comando"}
+                <Copy size={13} /> {copiedCmd ? t.library.copied : t.library.command}
               </Button>
             </div>
 
@@ -512,7 +514,7 @@ export const LibraryTab: React.FC = () => {
                   gap: 8,
                 }}
               >
-                <div style={{ fontSize: 12, fontWeight: 700 }}>Processar arquivo na Oficina</div>
+                <div style={{ fontSize: 12, fontWeight: 700 }}>{t.library.workshopTitle}</div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {[-14, -16, -23].map((lufs) => (
                     <Chip
@@ -520,14 +522,14 @@ export const LibraryTab: React.FC = () => {
                       active={wsLoudnorm === lufs}
                       onClick={() => setWsLoudnorm(lufs)}
                     >
-                      Normalizar {lufs} LUFS
+                      {t.library.normalize(lufs)}
                     </Chip>
                   ))}
                 </div>
                 <Toggle
                   checked={wsTrimSilence}
                   onChange={setWsTrimSilence}
-                  label="Cortar silêncio inicial e final"
+                  label={t.library.trimSilence}
                 />
                 <Button
                   size="sm"
@@ -535,7 +537,7 @@ export const LibraryTab: React.FC = () => {
                   disabled={runningWs}
                   onClick={() => handleStandaloneWorkshop(selected)}
                 >
-                  {runningWs ? "Processando no FFmpeg..." : "Aplicar agora"}
+                  {runningWs ? t.library.processing : t.library.applyNow}
                 </Button>
               </div>
             )}
@@ -545,7 +547,7 @@ export const LibraryTab: React.FC = () => {
               {confirmDeleteId === selected.id ? (
                 <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "space-between" }}>
                   <span style={{ fontSize: 12, color: "var(--warn)" }}>
-                    Apagar também do disco?
+                    {t.library.deleteFromDisk}
                   </span>
                   <div style={{ display: "flex", gap: 6 }}>
                     <Button
@@ -558,7 +560,7 @@ export const LibraryTab: React.FC = () => {
                         reload();
                       }}
                     >
-                      Só histórico
+                      {t.library.historyOnly}
                     </Button>
                     <Button
                       size="sm"
@@ -570,7 +572,7 @@ export const LibraryTab: React.FC = () => {
                         reload();
                       }}
                     >
-                      Apagar arquivo
+                      {t.library.deleteFile}
                     </Button>
                   </div>
                 </div>
@@ -580,7 +582,7 @@ export const LibraryTab: React.FC = () => {
                   variant="ghost"
                   onClick={() => setConfirmDeleteId(selected.id)}
                 >
-                  <Trash2 size={13} /> Remover / Apagar arquivo
+                  <Trash2 size={13} /> {t.library.removeOrDelete}
                 </Button>
               )}
             </div>

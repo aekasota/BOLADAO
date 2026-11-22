@@ -138,7 +138,7 @@ impl LibraryStore {
                 json
             ],
         )
-        .map_err(|e| format!("Erro salvando na Biblioteca: {e}"))?;
+        .map_err(|e| tr!("Erro salvando na Biblioteca: {e}", "Error saving to the Library: {e}", "Error al guardar en la Biblioteca: {e}"))?;
         Ok(())
     }
 
@@ -230,7 +230,7 @@ impl LibraryStore {
             if delete_disk_file {
                 if entry.primary_path.is_file() {
                     fs::remove_file(&entry.primary_path)
-                        .map_err(|e| format!("Não foi possível apagar o arquivo: {e}"))?;
+                        .map_err(|e| tr!("Não foi possível apagar o arquivo: {e}", "Couldn't delete the file: {e}", "No se pudo borrar el archivo: {e}"))?;
                 }
                 for extra in &entry.extra_paths {
                     let _ = fs::remove_file(extra);
@@ -413,7 +413,7 @@ pub async fn generate_spectrogram_and_cutoff(
     bins: &BinManager,
 ) -> Result<(String, Option<String>), String> {
     if !path.is_file() {
-        return Err("Arquivo não encontrado no disco.".to_string());
+        return Err(tr!("Arquivo não encontrado no disco.", "File not found on disk.", "Archivo no encontrado en el disco."));
     }
     let fname = format!("{id}.png");
     let spec_out = spectrograms_cache_dir().join(&fname);
@@ -436,9 +436,13 @@ pub async fn generate_spectrogram_and_cutoff(
         let (code, _, stderr) =
             run_hidden_output(&bins.ffmpeg_exe(), &args, ProcessPriority::BelowNormal)
                 .await
-                .map_err(|e| format!("Falha gerando espectrograma: {e}"))?;
+                .map_err(|e| tr!("Falha gerando espectrograma: {e}", "Couldn't generate the spectrogram: {e}", "No se pudo generar el espectrograma: {e}"))?;
         if code != 0 || !spec_out.is_file() {
-            return Err(format!("FFmpeg não conseguiu gerar espectrograma: {stderr}"));
+            return Err(tr!(
+            "FFmpeg não conseguiu gerar espectrograma: {stderr}",
+            "FFmpeg couldn't generate the spectrogram: {stderr}",
+            "FFmpeg no pudo generar el espectrograma: {stderr}"
+        ));
         }
     }
 
@@ -496,7 +500,11 @@ async fn detect_16khz_shelf_cutoff(path: &Path, bins: &BinManager) -> Option<Str
         // If midband has normal musical energy (> -45 dBFS) and >16.8 kHz drops by > 36 dB (or below -78 dB),
         // there is a clear brickwall lowpass around ~16 kHz typical of 128-160 kbps lossy codecs!
         if mid > -45.0 && (mid - hi > 36.0 || hi < -78.0) {
-            return Some("Agudos cortam em ~16 kHz: a fonte tinha perdas.".to_string());
+            return Some(tr!(
+            "Agudos cortam em ~16 kHz: a fonte tinha perdas.",
+            "Highs cut off at ~16 kHz: the source was lossy.",
+            "Los agudos se cortan en ~16 kHz: la fuente tenía pérdidas."
+        ));
         }
     }
     None

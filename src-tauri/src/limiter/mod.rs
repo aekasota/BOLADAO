@@ -150,6 +150,8 @@ struct MetricsState {
     configured_custom_bps: u64,
     light_bps: u64,
     peak_7d_bps: u64,
+    /// Highest speed measured today; the 7-day peak is the highest of the daily ones.
+    today_peak_bps: u64,
     game_mode_active: bool,
     game_profile: BandwidthProfile,
     game_custom_bps: u64,
@@ -207,6 +209,7 @@ impl BandwidthLimiter {
                 configured_custom_bps: custom_bps,
                 light_bps,
                 peak_7d_bps,
+                today_peak_bps: 0,
                 game_mode_active: false,
                 game_profile: BandwidthProfile::Light,
                 game_custom_bps: light_bps,
@@ -275,6 +278,20 @@ impl BandwidthLimiter {
         self.bucket.set_rate_bps(eff);
     }
 
+    /// Restores today's peak measured earlier in the day (it was saved in the settings).
+    pub fn seed_today_peak(&self, bps: u64) {
+        let mut m = self.metrics.lock();
+        m.today_peak_bps = bps;
+        m.peak_7d_bps = m.peak_7d_bps.max(bps);
+    }
+
+    /// A new day began: today's peak starts over and the 7-day peak drops the day that expired.
+    pub fn start_new_day(&self, peak_7d_bps: u64) {
+        let mut m = self.metrics.lock();
+        m.today_peak_bps = 0;
+        m.peak_7d_bps = peak_7d_bps;
+    }
+
     pub fn set_game_mode_active(
         &self,
         active: bool,
@@ -295,7 +312,8 @@ impl BandwidthLimiter {
         self.bucket.set_rate_bps(eff);
     }
 
-    /// Called every 250ms (4 Hz) to sample bandwidth, update 60s sparkline & 7-day peak, and return stats.
+    /// Called every 250ms (4 Hz) to sample bandwidth, update the 60 s sparkline and the peaks, and
+    /// return the stats plus today's new peak, when there is one worth saving.
     pub fn sample_tick_250ms(&self) -> (LimiterStatsPayload, Option<u64>) {
         let bytes = self.bucket.drain_window_bytes();
         let inst_bps = (bytes * 4) as f64;
@@ -314,8 +332,10 @@ impl BandwidthLimiter {
             m.ema_speed_bps as u64
         };
 
-        if speed_bps > m.peak_7d_bps && speed_bps > 256 * 1024 {
-            m.peak_7d_bps = speed_bps;
+        // 5% steps, so a speed that is still climbing does not rewrite the settings every tick.
+        if speed_bps > 256 * 1024 && speed_bps > m.today_peak_bps + m.today_peak_bps / 20 {
+            m.today_peak_bps = speed_bps;
+            m.peak_7d_bps = m.peak_7d_bps.max(speed_bps);
             new_peak = Some(speed_bps);
         }
 
@@ -345,6 +365,21 @@ impl BandwidthLimiter {
         };
         (payload, new_peak)
     }
+}
+
+/// Keeps the daily peaks of the last 7 days (today included), keyed by `YYYY-MM-DD`, and returns the
+/// highest one. Days that do not parse are dropped.
+pub fn prune_daily_peaks(
+    peaks: &mut std::collections::BTreeMap<String, u64>,
+    today: chrono::NaiveDate,
+) -> u64 {
+    let oldest = today - chrono::Duration::days(6);
+    peaks.retain(|day, _| {
+        chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d")
+            .map(|d| d >= oldest && d <= today)
+            .unwrap_or(false)
+    });
+    peaks.values().copied().max().unwrap_or(0)
 }
 
 fn compute_effective_limit(
@@ -594,6 +629,25 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_seven_day_peak_forgets_older_days() {
+        use std::collections::BTreeMap;
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 11, 22).unwrap();
+        let mut peaks: BTreeMap<String, u64> = [
+            ("2026-11-14", 90),
+            ("2026-11-15", 80),
+            ("2026-11-16", 30),
+            ("2026-11-22", 20),
+            ("lixo", 999),
+        ]
+        .into_iter()
+        .map(|(d, v)| (d.to_string(), v))
+        .collect();
+
+        assert_eq!(prune_daily_peaks(&mut peaks, today), 30);
+        assert_eq!(peaks.len(), 2, "só ficam os 7 últimos dias: {peaks:?}");
+    }
+
     use super::*;
 
     /// Starts a tiny local HTTP server that streams `total_bytes` of payload.

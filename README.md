@@ -17,6 +17,7 @@ Mais de 1.600 sites, fila persistente, Oficina FFmpeg, Modo Jogo e um fundo Op-A
   <img src="https://img.shields.io/badge/React%2019-TypeScript-1F1F23?style=for-the-badge&logo=react&logoColor=FA023E&labelColor=161616" alt="React 19 e TypeScript" />
   <img src="https://img.shields.io/badge/WebGL2-Shader%20Op--Art-1F1F23?style=for-the-badge&logo=webgl&logoColor=FA023E&labelColor=161616" alt="Shader Op-Art em WebGL2" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/Licen%C3%A7a-MIT-1F1F23?style=for-the-badge&labelColor=161616" alt="Licença MIT" /></a>
+  <a href="https://github.com/aekasota/BOLADAO/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/aekasota/BOLADAO/ci.yml?branch=main&style=for-the-badge&label=CI&labelColor=161616" alt="Estado do CI" /></a>
 </p>
 
 <p>
@@ -54,7 +55,8 @@ O Boladão junta yt-dlp, FFmpeg e Deno em um aplicativo nativo. Você instala, c
 - **Oficina FFmpeg.** Normaliza o volume em LUFS, converte para WAV 24-bit, comprime vídeo para caber no Discord ou no WhatsApp, gera GIF e transcreve áudio no próprio PC.
 - **Fila persistente.** Fica salva em SQLite, tenta de novo quando a rede oscila e, se o app fechar no meio, continua cada download de onde parou.
 - **Biblioteca com análise técnica.** `ffprobe`, loudness, forma de onda e um espectrograma que acusa quando a fonte já tinha perdas.
-- **Transparente.** Avisa sobre DRM antes de tentar, explica cada erro em português com a ação para resolver e mostra o comando `yt-dlp` equivalente de cada download.
+- **Transparente.** Avisa sobre DRM antes de tentar, explica cada erro com a ação para resolver e mostra o comando `yt-dlp` equivalente de cada download.
+- **Em três idiomas.** Português, inglês e espanhol, escolhido pelo idioma do Windows e trocável em *Ajustes → Aparência*. O inglês e o espanhol são neutros, para soar natural em qualquer país.
 
 <br />
 
@@ -135,7 +137,7 @@ O retângulo ao lado do nome, no canto superior esquerdo, é um recorte de 24 ×
 
 ### Texto
 
-A interface é toda em português do Brasil, com frases curtas e sem jargão. Quando o yt-dlp falha, o app traduz o erro e oferece uma saída:
+A interface nasceu em português do Brasil, com frases curtas e sem jargão, e fala também inglês e espanhol neutros. O idioma segue o do Windows (números e datas seguem o formato regional) e pode ser fixado em *Ajustes → Aparência*; a troca vale na hora, inclusive no menu da bandeja e nas notificações. Quando o yt-dlp falha, o app traduz o erro e oferece uma saída:
 
 | O yt-dlp responde | O Boladão mostra | E oferece |
 |---|---|---|
@@ -182,7 +184,7 @@ Cole o link em qualquer tela do app com <kbd>Ctrl</kbd> + <kbd>V</kbd>, arraste-
 - **Aviso de compatibilidade:** se você pede 4K em MP4 H.264 e essa resolução só existe em VP9 ou AV1, o app mostra a maior resolução H.264 disponível e oferece três saídas: usar essa resolução, manter a original em MKV ou recodificar para H.264 (na GPU, quando houver).
 - **Extras:** legendas embutidas ou em `.srt` (inclusive as automáticas), capítulos embutidos ou divididos em arquivos, corte de trecho com controle duplo e corte preciso nos keyframes, SponsorBlock para remover ou marcar trechos (com um atalho para *Trecho sem música* em clipes), capa quadrada 1:1, separação de "Artista - Título" nos metadados e limpeza de sufixos como "(Official Video)".
 - **Lives e estreias:** gravar a partir de agora, desde o início ou esperar a estreia começar. Quando o vídeo ainda não estreou, essa última opção já vem marcada.
-- **Destino com prévia:** o caminho final aparece antes do download, montado a partir de modelos com 12 campos em português, como `{artista}\{album}\{faixa}` para áudio e `{plataforma}\{canal}\{titulo} [{id}]` para vídeo.
+- **Destino com prévia:** o caminho final aparece antes do download, montado a partir de modelos com 12 campos, como `{artista}\{album}\{faixa}` para áudio e `{plataforma}\{canal}\{titulo} [{id}]` para vídeo. Os campos também valem em inglês (`{artist}`, `{track}`, `{title}`…) e espanhol (`{pista}`, `{año}`…), e um modelo funciona qualquer que seja o idioma em que foi escrito.
 
 ### Playlists
 
@@ -242,7 +244,7 @@ A fila fica salva em SQLite. Pausar e retomar continua do ponto em que parou, e 
 
 Todo o tráfego dos downloads passa por um proxy HTTP/CONNECT local, em `127.0.0.1`, com porta e credencial aleatórias a cada sessão. Ele aplica um *token bucket* compartilhado: o limite vale para a soma dos downloads, e não para cada um. O yt-dlp é obrigado a usar o downloader nativo em HLS e DASH, então esses fluxos também respeitam o limite.
 
-- **Perfis:** *Sem limite*, *Equilibrado* (60% do maior pico já medido na sua conexão), *Leve* (2 MB/s) ou *Personalizado*, num controle logarítmico que mostra MB/s e Mbps juntos. A troca é feita na barra de status ou na bandeja e vale em menos de 1 s, mesmo no meio de um download (há teste para isso).
+- **Perfis:** *Sem limite*, *Equilibrado* (60% do maior pico medido na sua conexão nos últimos 7 dias), *Leve* (2 MB/s) ou *Personalizado*, num controle logarítmico que mostra MB/s e Mbps juntos. A troca é feita na barra de status ou na bandeja e vale em menos de 1 s, mesmo no meio de um download (há teste para isso).
 - **Limite preciso:** antes de conectar, cada socket recebe `SO_RCVBUF` de 256 KB, para o Windows não acumular megabytes em buffer, e as rajadas ficam limitadas a 125 ms de banda.
 - **Plano B:** se o proxy não subir, o app usa `--limit-rate` e divide o limite entre os downloads.
 
@@ -297,7 +299,7 @@ Do link colado ao arquivo na pasta:
 6. **Oficina.** Se houver etapas configuradas, o FFmpeg processa o arquivo e informa o avanço por `-progress pipe:1`.
 7. **Biblioteca.** O arquivo final passa por `ffprobe`, loudness e forma de onda e entra na Biblioteca, enquanto o fundo pulsa a partir do item concluído.
 
-Se algo falhar, o erro do yt-dlp vira uma mensagem em português com uma ação sugerida, e as falhas temporárias voltam para a fila sozinhas.
+Se algo falhar, o erro do yt-dlp vira uma mensagem no idioma da interface com uma ação sugerida, e as falhas temporárias voltam para a fila sozinhas.
 
 <br />
 
@@ -370,7 +372,7 @@ cd BOLADAO
 powershell -ExecutionPolicy Bypass -File scripts/fetch-binaries.ps1
 ```
 
-O script lê [`vendor/manifest.json`](vendor/manifest.json), confere que o hash esperado de yt-dlp e Deno aparece nos arquivos de checksum oficiais (`SHA2-256SUMS` e `.sha256sum`), baixa os pacotes com `curl.exe`, valida o SHA-256 de cada um e extrai tudo em `vendor/bin/`, pasta ignorada pelo Git. Ele também baixa o bootstrapper oficial do WebView2, que vai embutido no instalador. Os arquivos ficam em cache em `vendor/cache/`; use `-Force` para baixar de novo.
+O script lê [`vendor/manifest.json`](vendor/manifest.json), confere que o hash esperado de yt-dlp e Deno aparece nos arquivos de checksum oficiais (`SHA2-256SUMS` e `.sha256sum`), baixa os pacotes com `curl.exe`, valida o SHA-256 de cada um e extrai tudo em `vendor/bin/`, pasta ignorada pelo Git. Ele também baixa o bootstrapper oficial do WebView2, que vai embutido no instalador e só é aceito com assinatura Authenticode válida da Microsoft, conferida aqui e de novo a cada build do instalador. Os arquivos ficam em cache em `vendor/cache/`; use `-Force` para baixar de novo.
 
 > [!IMPORTANT]
 > Rode este passo antes de qualquer `cargo` ou `npm run tauri`. O [`src-tauri/build.rs`](src-tauri/build.rs) empacota `vendor/bin` dentro do binário e interrompe a compilação se a pasta não existir.
@@ -398,10 +400,12 @@ O Tauri sobe o Vite em `http://localhost:1420` e abre o app com recarga a quente
 # Verificação do TypeScript (tsc) e build de produção do frontend
 npm run build
 
-# 32 testes em Rust
+# 36 testes em Rust
 cd src-tauri
 cargo test
 ```
+
+O GitHub Actions roda esses mesmos passos, num Windows limpo, a cada push na `main` e em cada pull request ([`ci.yml`](.github/workflows/ci.yml)).
 
 Os testes cobrem:
 
@@ -417,6 +421,8 @@ Os testes cobrem:
 - atualização: comparação de versões, recusa de arquivo adulterado e troca do executável só com assinatura válida;
 - instância única: a segunda abertura é recusada e acorda a primeira, e a versão nova espera a antiga fechar;
 - protocolo de mídia restrito aos nomes que o app gera, e `settings.json` regravado sem apagar o anterior, abrindo também os ajustes de versões antigas;
+- idioma: o idioma do Windows vira português, inglês ou espanhol, as mensagens seguem o idioma atual e os modelos de pasta aceitam campos em qualquer um dos três;
+- banda: o pico dos últimos 7 dias descarta os dias que saíram da janela;
 - o limitador de verdade: 20 MB a 2 MB/s em 10 s (±10%) e troca de limite no meio da transferência em menos de 1 s. Só esse teste leva uns 12 s.
 
 ### 6. Gerar o instalador
@@ -546,8 +552,9 @@ BOLADAO/
 │   │   └── installer/          # Telas do instalador e do desinstalador
 │   ├── lib/                    # IPC tipado (com respostas locais fora do Tauri) e formatação
 │   ├── shader/                 # Shader GLSL, física do cursor e qualidade adaptativa
+│   ├── i18n/                   # Textos da interface em português, inglês e espanhol
 │   ├── stores/                 # Estado em Zustand (app, fila, limitador e ajustes)
-│   ├── theme/tokens.css        # Tokens dos quatro temas, tipografia, notch e painéis
+│   ├── theme/tokens.css        # Tokens dos cinco temas, tipografia, notch e painéis
 │   ├── ui/Primitives.tsx       # Botões, chips, toggles, slider e barra listrada
 │   └── assets/fonts/           # Archivo e JetBrains Mono (variáveis, embutidas)
 ├── src-tauri/                  # Backend: Rust + Tauri 2
@@ -559,7 +566,8 @@ BOLADAO/
 │       ├── bins/               # Extração, detecção de GPU e filtros, atualização do yt-dlp
 │       ├── classify/           # Classificação local de links, dedup e DRM
 │       ├── cookies/            # Janelas de login isoladas e cookies.txt (Netscape)
-│       ├── errors/             # Tradução de erros para PT-BR com ação sugerida
+│       ├── errors/             # Tradução de erros do yt-dlp, com ação sugerida
+│       ├── i18n/               # Idioma atual, detecção pelo Windows e a macro tr!
 │       ├── gamemode/           # Detecção de jogo (Direct3D, tela cheia e .exe)
 │       ├── installer/          # Modos instalador e desinstalador
 │       ├── ipc/                # Comandos Tauri e arraste nativo de arquivos
@@ -593,7 +601,7 @@ BOLADAO/
 | CPU com 3 downloads limitados a 2 MB/s | 0,21% |
 | GPU com *Reduzir movimento*, Modo Jogo ou janela minimizada | 0%, porque o loop de renderização para |
 | Processos órfãos depois de cancelar ou fechar à força | 0, graças aos Job Objects |
-| `cargo test` | 32 de 32 aprovados |
+| `cargo test` | 36 de 36 aprovados |
 
 <sub>Medições do autor no Windows 10/11 x64, no processo principal (<code>Boladão.exe</code>). O WebView2 roda em processos próprios do Windows, que não entram nesses números.</sub>
 
@@ -665,7 +673,7 @@ Pode, com cuidado. Usar uma conta logada com o yt-dlp pode levar a restrições 
 
 - **Bugs e ideias:** use os modelos de [bug](https://github.com/aekasota/BOLADAO/issues/new?template=bug_report.md) e de [melhoria](https://github.com/aekasota/BOLADAO/issues/new?template=feature_request.md). Em bugs de download, inclua o log do item (seta › à direita dele, na **Fila**) e a saída de *Ajustes → Componentes → Testar motores*.
 - **Antes do pull request:** `npm run build` e `cargo test` precisam passar.
-- **Texto da interface:** português do Brasil, no tom do app: frases curtas, sem jargão e com uma ação quando algo dá errado.
+- **Texto da interface:** português do Brasil, no tom do app: frases curtas, sem jargão e com uma ação quando algo dá errado. Todo texto visível mora em [`src/i18n/`](src/i18n/) (`pt.ts` é a referência; o TypeScript acusa qualquer chave que falte em `en.ts` ou `es.ts`), e mensagens do backend usam a macro `tr!(pt, en, es)`.
 - **Cores:** só pelos tokens de [`src/theme/tokens.css`](src/theme/tokens.css). Ao mudar um tema, atualize também as cores do shader em [`src/shader/physics.ts`](src/shader/physics.ts) e a tabela do teste de contraste em [`src-tauri/src/settings.rs`](src-tauri/src/settings.rs), porque o teste não lê o CSS. Um tema novo entra ainda no `ThemeId` ([`src/lib/ipc.ts`](src/lib/ipc.ts) e `settings.rs`) e no seletor de [`SettingsTab.tsx`](src/features/settings/SettingsTab.tsx).
 - **Argumentos do yt-dlp:** os snapshots em `src-tauri/src/args/snapshots/` acusam qualquer mudança. Revise com `cargo insta review` (instale com `cargo install cargo-insta`).
 

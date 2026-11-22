@@ -1,3 +1,7 @@
+// First, so the `tr!` macro is in scope in every module below.
+#[macro_use]
+pub mod i18n;
+
 pub mod args;
 pub mod bins;
 pub mod classify;
@@ -74,9 +78,13 @@ fn run_installer_or_uninstaller_ui(launch_mode: LaunchMode) {
                 serde_json::to_string(&mode_for_setup).unwrap_or_else(|_| "{\"mode\":\"installer\"}".to_string());
             let init_script = format!("window.__BOLADAO_LAUNCH__ = {init_json};");
             let (title, w, h) = match &mode_for_setup {
-                LaunchMode::Installer => ("Instalar Boladão", 760.0, 548.0),
-                LaunchMode::Uninstaller { .. } => ("Desinstalar Boladão", 640.0, 440.0),
-                LaunchMode::App => (APP_NAME, 1120.0, 740.0),
+                LaunchMode::Installer => (tr!("Instalar Boladão", "Install Boladão", "Instalar Boladão"), 760.0, 548.0),
+                LaunchMode::Uninstaller { .. } => (
+                    tr!("Desinstalar Boladão", "Uninstall Boladão", "Desinstalar Boladão"),
+                    640.0,
+                    440.0,
+                ),
+                LaunchMode::App => (APP_NAME.to_string(), 1120.0, 740.0),
             };
 
             WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
@@ -94,6 +102,7 @@ fn run_installer_or_uninstaller_ui(launch_mode: LaunchMode) {
         })
         .invoke_handler(tauri::generate_handler![
             ipc::get_launch_mode,
+            ipc::get_system_language,
             ipc::get_installer_defaults,
             ipc::install_boladao,
             ipc::launch_installed_boladao,
@@ -105,6 +114,9 @@ fn run_installer_or_uninstaller_ui(launch_mode: LaunchMode) {
 }
 
 pub fn run() {
+    // Messages shown before the settings load (installer, missing WebView2) follow Windows.
+    i18n::set(i18n::system());
+
     if std::env::args().any(|arg| arg == "--setup-init") {
         run_setup_init();
         return;
@@ -139,6 +151,7 @@ pub fn run() {
     }
 
     let settings = Arc::new(RwLock::new(load_or_init_settings()));
+    i18n::apply(settings.read().language);
     {
         let cfg = settings.read();
         let _ = fs::create_dir_all(&cfg.music_root);
@@ -158,6 +171,14 @@ pub fn run() {
     let rt = tokio::runtime::Runtime::new().expect("Falha iniciando runtime Tokio");
     tauri::async_runtime::set(rt.handle().clone());
 
+    // The 7-day peak is the highest of the daily peaks still inside the window.
+    let today_peak = {
+        let mut cfg = settings.write();
+        let today = chrono::Local::now().date_naive();
+        cfg.peak_7d_bps = limiter::prune_daily_peaks(&mut cfg.daily_peaks, today);
+        cfg.daily_peaks.get(&today.to_string()).copied().unwrap_or(0)
+    };
+
     let limiter = rt.block_on(async {
         let cfg = settings.read();
         BandwidthLimiter::start(
@@ -168,6 +189,7 @@ pub fn run() {
         )
         .await
     });
+    limiter.seed_today_peak(today_peak);
 
     let queue = rt.block_on(async {
         QueueManager::open_default(
@@ -308,12 +330,22 @@ pub fn run() {
             let handle_lim = handle.clone();
             tauri::async_runtime::spawn(async move {
                 let mut ticker = tokio::time::interval(Duration::from_millis(250));
+                let mut day = chrono::Local::now().date_naive();
                 loop {
                     ticker.tick().await;
+                    let today = chrono::Local::now().date_naive();
+                    if today != day {
+                        day = today;
+                        let mut cfg = settings_lim.write();
+                        cfg.peak_7d_bps = limiter::prune_daily_peaks(&mut cfg.daily_peaks, today);
+                        limiter_bg.start_new_day(cfg.peak_7d_bps);
+                        let _ = save_settings_to_disk(&cfg);
+                    }
                     let (stats, new_peak) = limiter_bg.sample_tick_250ms();
                     if let Some(pk) = new_peak {
                         let mut cfg = settings_lim.write();
-                        cfg.peak_7d_bps = pk;
+                        cfg.daily_peaks.insert(today.to_string(), pk);
+                        cfg.peak_7d_bps = limiter::prune_daily_peaks(&mut cfg.daily_peaks, today);
                         let _ = save_settings_to_disk(&cfg);
                     }
                     let _ = handle_lim.emit("limiter:stats", stats);
@@ -406,7 +438,11 @@ pub fn run() {
                                 .notification()
                                 .builder()
                                 .title(APP_NAME)
-                                .body("Downloads em andamento: o Boladão ficou na bandeja do sistema.")
+                                .body(tr!(
+                                    "Downloads em andamento: o Boladão ficou na bandeja do sistema.",
+                                    "Downloads in progress: Boladão is still running in the system tray.",
+                                    "Descargas en curso: Boladão sigue en la bandeja del sistema."
+                                ))
                                 .show();
                         }
                     }
@@ -419,6 +455,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             ipc::get_launch_mode,
+            ipc::get_system_language,
             ipc::get_installer_defaults,
             ipc::install_boladao,
             ipc::launch_installed_boladao,
@@ -493,6 +530,44 @@ fn is_media_cache_name(name: &str) -> bool {
         && stem.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-')
 }
 
+/// Tray menu entries, kept so their labels can follow a language change.
+struct TrayItems(Vec<MenuItem<tauri::Wry>>);
+
+fn tray_label(id: &str) -> String {
+    match id {
+        "show" => tr!("Abrir Boladão", "Open Boladão", "Abrir Boladão"),
+        "pause_all" => tr!("Pausar tudo", "Pause all", "Pausar todo"),
+        "resume_all" => tr!("Retomar tudo", "Resume all", "Reanudar todo"),
+        "bw_unlimited" => tr!(
+            "Banda: Sem limite (∞)",
+            "Bandwidth: Unlimited (∞)",
+            "Ancho de banda: Sin límite (∞)"
+        ),
+        "bw_balanced" => tr!(
+            "Banda: Equilibrado (60%)",
+            "Bandwidth: Balanced (60%)",
+            "Ancho de banda: Equilibrado (60%)"
+        ),
+        "bw_light" => tr!(
+            "Banda: Leve (2 MB/s)",
+            "Bandwidth: Light (2 MB/s)",
+            "Ancho de banda: Ligero (2 MB/s)"
+        ),
+        "open_folder" => tr!("Abrir pasta de vídeos", "Open videos folder", "Abrir carpeta de videos"),
+        "quit" => tr!("Sair", "Quit", "Salir"),
+        _ => String::new(),
+    }
+}
+
+/// Rewrites the tray labels in the current language.
+pub fn refresh_tray_texts(app: &AppHandle) {
+    if let Some(items) = app.try_state::<TrayItems>() {
+        for item in &items.0 {
+            let _ = item.set_text(tray_label(item.id().as_ref()));
+        }
+    }
+}
+
 /// Brings the main window back from the tray (or from minimized) and gives it focus.
 fn show_main_window(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
@@ -503,17 +578,28 @@ fn show_main_window(app: &AppHandle) {
 }
 
 fn setup_system_tray(app: &AppHandle) -> tauri::Result<()> {
-    let show_i = MenuItem::with_id(app, "show", "Abrir Boladão", true, None::<&str>)?;
+    let item = |id: &str| MenuItem::with_id(app, id, tray_label(id), true, None::<&str>);
+    let show_i = item("show")?;
     let sep1 = PredefinedMenuItem::separator(app)?;
-    let pause_i = MenuItem::with_id(app, "pause_all", "Pausar tudo", true, None::<&str>)?;
-    let resume_i = MenuItem::with_id(app, "resume_all", "Retomar tudo", true, None::<&str>)?;
+    let pause_i = item("pause_all")?;
+    let resume_i = item("resume_all")?;
     let sep2 = PredefinedMenuItem::separator(app)?;
-    let bw_inf = MenuItem::with_id(app, "bw_unlimited", "Banda: Sem limite (∞)", true, None::<&str>)?;
-    let bw_bal = MenuItem::with_id(app, "bw_balanced", "Banda: Equilibrado (60%)", true, None::<&str>)?;
-    let bw_light = MenuItem::with_id(app, "bw_light", "Banda: Leve (2 MB/s)", true, None::<&str>)?;
+    let bw_inf = item("bw_unlimited")?;
+    let bw_bal = item("bw_balanced")?;
+    let bw_light = item("bw_light")?;
     let sep3 = PredefinedMenuItem::separator(app)?;
-    let open_dir = MenuItem::with_id(app, "open_folder", "Abrir pasta de vídeos", true, None::<&str>)?;
-    let quit_i = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
+    let open_dir = item("open_folder")?;
+    let quit_i = item("quit")?;
+    app.manage(TrayItems(vec![
+        show_i.clone(),
+        pause_i.clone(),
+        resume_i.clone(),
+        bw_inf.clone(),
+        bw_bal.clone(),
+        bw_light.clone(),
+        open_dir.clone(),
+        quit_i.clone(),
+    ]));
 
     let menu = Menu::with_items(
         app,

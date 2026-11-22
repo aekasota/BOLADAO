@@ -32,7 +32,7 @@ import {
   VideoProfile,
   WavBitDepth,
 } from "../../lib/ipc";
-import { formatBytes, formatDuration, formatKindPt } from "../../lib/format";
+import { formatBytes, formatDuration, formatKind } from "../../lib/format";
 import { useAppStore } from "../../stores/appStore";
 import { useQueueStore } from "../../stores/queueStore";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -50,21 +50,23 @@ import {
   StripeProgress,
   Toggle,
 } from "../../ui/Primitives";
+import { formatDecimal, formatNumber, useT } from "../../i18n";
 
-const SPONSORBLOCK_CATS: { id: string; label: string }[] = [
-  { id: "sponsor", label: "Patrocínio" },
-  { id: "selfpromo", label: "Autopromoção" },
-  { id: "interaction", label: "Lembrete de like/inscrição" },
-  { id: "intro", label: "Intro" },
-  { id: "outro", label: "Encerramento" },
-  { id: "preview", label: "Prévia" },
-  { id: "filler", label: "Enrolação" },
-  { id: "music_offtopic", label: "Trecho sem música" },
-];
+const SPONSORBLOCK_CATS = [
+  "sponsor",
+  "selfpromo",
+  "interaction",
+  "intro",
+  "outro",
+  "preview",
+  "filler",
+  "music_offtopic",
+] as const;
 
 export const DownloadTab: React.FC<{
   urlInputRef: React.RefObject<HTMLInputElement | null>;
 }> = ({ urlInputRef }) => {
+  const t = useT();
   const stageElRef = useRef<HTMLDivElement | null>(null);
   const urlPlateRef = useRef<HTMLDivElement | null>(null);
 
@@ -300,7 +302,7 @@ export const DownloadTab: React.FC<{
       setClassification(null);
       setProbeResult(null);
       if (trimmed.length > 8) {
-        setUrlError(typeof e === "string" ? e : "Link inválido.");
+        setUrlError(typeof e === "string" ? e : t.download.invalidLink);
       }
     }
   };
@@ -344,12 +346,12 @@ export const DownloadTab: React.FC<{
 
     api
       .previewPath(spec.output_root, spec.output_template, {
-        media_type: spec.mode === "audio" ? "Música" : "Vídeos",
+        media_type: spec.mode === "audio" ? t.settings.previewSample.music : t.settings.previewSample.videos,
         platform: classification?.platform_name || "YouTube",
-        creator: probeResult?.channel_or_artist || "Artista ou Canal",
+        creator: probeResult?.channel_or_artist || t.download.sampleCreator,
         playlist: probeResult?.playlist_title || null,
         index: 1,
-        title: probeResult?.title || "Título da mídia",
+        title: probeResult?.title || t.download.sampleTitle,
         track: probeResult?.title || null,
         id: probeResult?.id || "id",
         year: uploadYear,
@@ -363,7 +365,7 @@ export const DownloadTab: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [spec, probeResult, classification]);
+  }, [spec, probeResult, classification, t]);
 
   // Filtered playlist items
   const filteredPlaylistEntries = useMemo(() => {
@@ -422,7 +424,7 @@ export const DownloadTab: React.FC<{
       directory: true,
       multiple: false,
       defaultPath: spec.output_root,
-      title: "Escolher pasta de destino",
+      title: t.download.pickFolderTitle,
     });
     if (typeof picked === "string" && picked.trim()) {
       setSpec((prev) => ({ ...prev, output_root: picked }));
@@ -438,7 +440,7 @@ export const DownloadTab: React.FC<{
       setRawUrl("");
       setBatchUrls([]);
       setClassification(null);
-      setStatusBanner(`${created.length} links adicionados à fila.`);
+      setStatusBanner(t.download.batchAdded(created.length));
       return;
     }
 
@@ -450,7 +452,7 @@ export const DownloadTab: React.FC<{
         selectedIndices.has(e.index)
       );
       if (chosen.length === 0) {
-        setStatusBanner("Selecione pelo menos um item da playlist.");
+        setStatusBanner(t.download.selectPlaylistItem);
         return;
       }
       const created = await api.enqueuePlaylist(
@@ -460,7 +462,7 @@ export const DownloadTab: React.FC<{
         spec,
         highPriority
       );
-      setStatusBanner(`${created.length} itens da playlist adicionados à fila.`);
+      setStatusBanner(t.download.playlistAdded(created.length));
       return;
     }
 
@@ -478,12 +480,12 @@ export const DownloadTab: React.FC<{
     });
 
     if (outcome.status === "already_queued") {
-      setStatusBanner("Esse link já está na fila.");
+      setStatusBanner(t.download.alreadyQueued);
     } else if (outcome.status === "already_in_library") {
       setDuplicateEntry({ entry: outcome.entry, highPriority });
     } else {
       setStatusBanner(
-        highPriority ? "Iniciando download agora." : "Adicionado à fila."
+        highPriority ? t.download.startingNow : t.download.addedToQueue
       );
     }
   };
@@ -504,19 +506,19 @@ export const DownloadTab: React.FC<{
     if (spec.mode !== "audio") return null;
     switch (spec.audio_format) {
       case "original":
-        return "Mesma qualidade da fonte, sem reconversão. Geralmente Opus ou AAC.";
+        return t.download.audioNotes.original;
       case "mp3":
-        return "Converte de uma fonte com perdas; não fica melhor que a original.";
+        return t.download.audioNotes.mp3;
       case "wav":
       case "aiff":
-        return "Converter Opus/AAC pra WAV/AIFF não melhora o som. Serve pra abrir em editor ou DAW. WAV/AIFF não exibem capa de álbum.";
+        return t.download.audioNotes.wav;
       case "flac":
       case "alac":
-        return "Lossless de uma fonte com perdas serve para compatibilidade com editores, não recupera qualidade.";
+        return t.download.audioNotes.lossless;
       default:
         return null;
     }
-  }, [spec.mode, spec.audio_format]);
+  }, [spec.mode, spec.audio_format, t]);
 
   return (
     <div
@@ -546,7 +548,7 @@ export const DownloadTab: React.FC<{
           }}
         >
           <span>
-            Pasta de música importada do yt2:{" "}
+            {t.download.migratedFromYt2}{" "}
             <strong className="font-mono-num" style={{ color: "var(--text)" }}>
               {settings.migrated_from_yt2}
             </strong>
@@ -560,7 +562,7 @@ export const DownloadTab: React.FC<{
               color: "var(--text-3)",
               cursor: "pointer",
             }}
-            aria-label="Fechar aviso"
+            aria-label={t.download.closeNotice}
           >
             <X size={14} />
           </button>
@@ -647,7 +649,7 @@ export const DownloadTab: React.FC<{
                         {classification.platform_name}
                       </span>
                       <span style={{ color: "var(--text-2)", fontSize: 12, whiteSpace: "nowrap" }}>
-                        · {formatKindPt(classification.kind)}
+                        · {formatKind(classification.kind)}
                         {probeResult?.is_playlist && probeResult.playlist_count
                           ? ` · ${probeResult.playlist_count}`
                           : ""}
@@ -667,8 +669,8 @@ export const DownloadTab: React.FC<{
                       handleSubmit(e.ctrlKey || e.metaKey);
                     }
                   }}
-                  placeholder="cole um link ou arraste aqui"
-                  aria-label="Campo de link para baixar"
+                  placeholder={t.download.urlPlaceholder}
+                  aria-label={t.download.urlAria}
                   style={{
                     flex: 1,
                     minWidth: 0,
@@ -689,7 +691,7 @@ export const DownloadTab: React.FC<{
                   <button
                     type="button"
                     onClick={() => handleUrlInput("")}
-                    title="Limpar campo"
+                    title={t.download.clearField}
                     style={{
                       width: 30,
                       height: 30,
@@ -723,7 +725,7 @@ export const DownloadTab: React.FC<{
                   }}
                 >
                   <span style={{ fontSize: 13, color: "var(--text-2)" }}>
-                    Esse link está dentro de uma playlist:
+                    {t.download.insidePlaylist}
                   </span>
                   <Segmented<ProbeScope>
                     id="watch-playlist-scope"
@@ -733,12 +735,10 @@ export const DownloadTab: React.FC<{
                       triggerProbe(classification.normalized_url, next);
                     }}
                     options={[
-                      { value: "single_video", label: "Só este vídeo" },
+                      { value: "single_video", label: t.download.onlyThisVideo },
                       {
                         value: "full_playlist",
-                        label: `Playlist inteira${
-                          probeResult?.playlist_count ? ` (${probeResult.playlist_count})` : ""
-                        }`,
+                        label: t.download.wholePlaylist(probeResult?.playlist_count ?? null),
                       },
                     ]}
                   />
@@ -790,7 +790,7 @@ export const DownloadTab: React.FC<{
                   {classification.drm_message}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-2)", marginTop: 2 }}>
-                  Plataformas com criptografia Widevine/FairPlay bloqueiam extração direta.
+                  {t.download.drmBody}
                 </div>
               </div>
             </motion.div>
@@ -813,18 +813,18 @@ export const DownloadTab: React.FC<{
             >
               <div>
                 <div style={{ fontSize: 16, fontWeight: 700 }}>
-                  {batchUrls.length} links detectados no texto colado
+                  {t.download.batchDetected(batchUrls.length)}
                 </div>
                 <div style={{ fontSize: 13, color: "var(--text-2)", marginTop: 4 }}>
-                  Todos serão enfileirados com a configuração atual ({spec.mode === "audio" ? "Áudio" : "Vídeo"}).
+                  {t.download.batchAllQueued(spec.mode === "audio" ? t.download.modeAudio : t.download.modeVideo)}
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <Button variant="secondary" onClick={() => switchMode(spec.mode === "audio" ? "video" : "audio")}>
-                  Trocar para {spec.mode === "audio" ? "Vídeo" : "Áudio"}
+                  {t.download.switchTo(spec.mode === "audio" ? t.download.modeVideo : t.download.modeAudio)}
                 </Button>
                 <Button variant="primary" size="lg" onClick={() => handleSubmit(false)}>
-                  <ListPlus size={16} /> Adicionar {batchUrls.length} links à fila
+                  <ListPlus size={16} /> {t.download.addLinks(batchUrls.length)}
                 </Button>
               </div>
             </motion.div>
@@ -844,8 +844,8 @@ export const DownloadTab: React.FC<{
               }}
             >
               <div style={{ fontSize: 13 }}>
-                <strong style={{ color: "var(--warn)" }}>Já baixado na Biblioteca:</strong>{" "}
-                {duplicateEntry.entry.title} ({duplicateEntry.entry.format_badge}). Baixar de novo?
+                <strong style={{ color: "var(--warn)" }}>{t.download.duplicateTitle}</strong>{" "}
+                {t.download.duplicateBody(duplicateEntry.entry.title, duplicateEntry.entry.format_badge)}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <Button
@@ -853,14 +853,14 @@ export const DownloadTab: React.FC<{
                   variant="secondary"
                   onClick={() => api.revealInExplorer(duplicateEntry.entry.primary_path)}
                 >
-                  Mostrar na pasta
+                  {t.download.showInFolder}
                 </Button>
                 <Button
                   size="sm"
                   variant="primary"
                   onClick={() => handleSubmit(duplicateEntry.highPriority, true)}
                 >
-                  Baixar de novo
+                  {t.download.downloadAgain}
                 </Button>
               </div>
             </div>
@@ -880,7 +880,7 @@ export const DownloadTab: React.FC<{
             >
               <span>{statusBanner}</span>
               <Button size="sm" variant="ghost" onClick={() => setActiveTab("queue")}>
-                Ver Fila →
+                {t.download.viewQueue}
               </Button>
             </div>
           )}
@@ -889,7 +889,7 @@ export const DownloadTab: React.FC<{
           {probing && (
             <div className="op-panel" style={{ padding: 16 }}>
               <div style={{ fontSize: 13, color: "var(--text-2)", marginBottom: 10 }}>
-                Lendo o link...
+                {t.download.reading}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "220px minmax(0, 1fr)", gap: 16 }}>
                 <div className="op-skeleton" style={{ height: 128, borderRadius: 8 }} />
@@ -933,7 +933,7 @@ export const DownloadTab: React.FC<{
                     variant="warn"
                     onClick={() => setActiveTab("settings", "accounts")}
                   >
-                    Conectar conta
+                    {t.queue.connectAccount}
                   </Button>
                 )}
                 {(probeError.code === "extractor_broken" || probeError.code === "unsupported_url") && (
@@ -944,7 +944,7 @@ export const DownloadTab: React.FC<{
                       if (classification) triggerProbe(classification.normalized_url, probeScope);
                     }}
                   >
-                    Atualizar yt-dlp e tentar de novo
+                    {t.queue.updateYtdlpRetry}
                   </Button>
                 )}
                 <Button
@@ -953,7 +953,7 @@ export const DownloadTab: React.FC<{
                     classification && triggerProbe(classification.normalized_url, probeScope)
                   }
                 >
-                  Tentar de novo
+                  {t.queue.retry}
                 </Button>
               </div>
             </div>
@@ -980,7 +980,7 @@ export const DownloadTab: React.FC<{
                 }}
               >
                 <span style={{ fontSize: 12, color: "var(--text-3)", marginRight: 4 }}>
-                  Presets:
+                  {t.download.presetsLabel}
                 </span>
                 {presets.map((p) => (
                   <Chip
@@ -1001,7 +1001,7 @@ export const DownloadTab: React.FC<{
                 <Popover.Root>
                   <Popover.Trigger asChild>
                     <Chip style={{ borderStyle: "dashed" }}>
-                      <Plus size={12} /> Salvar atual
+                      <Plus size={12} /> {t.download.saveCurrent}
                     </Chip>
                   </Popover.Trigger>
                   <Popover.Portal>
@@ -1011,11 +1011,11 @@ export const DownloadTab: React.FC<{
                       style={{ padding: 12, width: 260, zIndex: 60 }}
                     >
                       <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
-                        Salvar escolha atual como preset
+                        {t.download.savePresetTitle}
                       </div>
                       <input
                         className="op-input"
-                        placeholder="Ex.: Podcast limpo -16 LUFS"
+                        placeholder={t.download.presetPlaceholder}
                         value={presetName}
                         onChange={(e) => setPresetName(e.target.value)}
                         style={{ width: "100%", height: 32, padding: "0 10px", fontSize: 12 }}
@@ -1026,12 +1026,12 @@ export const DownloadTab: React.FC<{
                           variant="primary"
                           disabled={!presetName.trim()}
                           onClick={async () => {
-                            await api.saveCustomPreset(presetName.trim(), "Preset personalizado", spec);
+                            await api.saveCustomPreset(presetName.trim(), t.download.customPresetDesc, spec);
                             setPresetName("");
                             await refreshPresets();
                           }}
                         >
-                          Salvar
+                          {t.download.save}
                         </Button>
                       </div>
                     </Popover.Content>
@@ -1154,7 +1154,7 @@ export const DownloadTab: React.FC<{
                         className="font-mono-num"
                         style={{ fontSize: 11.5, color: "var(--text-3)", marginTop: 3 }}
                       >
-                        Tamanho estimado: ~{formatBytes(estimatedSizeBytes)}
+                        {t.download.estimatedSize(formatBytes(estimatedSizeBytes))}
                       </div>
                     )}
                   </div>
@@ -1173,7 +1173,7 @@ export const DownloadTab: React.FC<{
                           value: "video",
                           label: (
                             <>
-                              <Film size={14} /> Vídeo
+                              <Film size={14} /> {t.download.modeVideo}
                             </>
                           ),
                         },
@@ -1181,7 +1181,7 @@ export const DownloadTab: React.FC<{
                           value: "audio",
                           label: (
                             <>
-                              <Music size={14} /> Áudio
+                              <Music size={14} /> {t.download.modeAudio}
                             </>
                           ),
                         },
@@ -1197,7 +1197,7 @@ export const DownloadTab: React.FC<{
                             active={spec.live_mode === "wait_for_premiere"}
                             onClick={() => setSpec({ ...spec, live_mode: "wait_for_premiere" })}
                           >
-                            Esperar estreia começar
+                            {t.download.waitPremiere}
                           </Chip>
                         ) : (
                           <>
@@ -1205,13 +1205,13 @@ export const DownloadTab: React.FC<{
                               active={spec.live_mode === "from_start"}
                               onClick={() => setSpec({ ...spec, live_mode: "from_start" })}
                             >
-                              Desde o início
+                              {t.download.fromStart}
                             </Chip>
                             <Chip
                               active={spec.live_mode === "from_now"}
                               onClick={() => setSpec({ ...spec, live_mode: "from_now" })}
                             >
-                              A partir de agora
+                              {t.download.fromNow}
                             </Chip>
                           </>
                         )}
@@ -1224,7 +1224,7 @@ export const DownloadTab: React.FC<{
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         {(
                           [
-                            ["original", "Original"],
+                            ["original", t.download.formatOriginal],
                             ["mp3", "MP3"],
                             ["m4a", "M4A (AAC)"],
                             ["opus", "Opus"],
@@ -1246,12 +1246,12 @@ export const DownloadTab: React.FC<{
 
                       {spec.audio_format === "mp3" && (
                         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                          <span style={{ fontSize: 12, color: "var(--text-2)" }}>Qualidade:</span>
+                          <span style={{ fontSize: 12, color: "var(--text-2)" }}>{t.download.quality}</span>
                           <Chip
                             active={spec.mp3_quality === "v0"}
                             onClick={() => setSpec({ ...spec, mp3_quality: "v0" })}
                           >
-                            V0 VBR (recomendado)
+                            {t.download.mp3Recommended}
                           </Chip>
                           <Chip
                             active={spec.mp3_quality === "cbr320"}
@@ -1264,7 +1264,7 @@ export const DownloadTab: React.FC<{
 
                       {(spec.audio_format === "wav" || spec.audio_format === "aiff") && (
                         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                          <span style={{ fontSize: 12, color: "var(--text-2)" }}>Profundidade:</span>
+                          <span style={{ fontSize: 12, color: "var(--text-2)" }}>{t.download.bitDepth}</span>
                           {(
                             [
                               ["s16", "16-bit"],
@@ -1280,14 +1280,14 @@ export const DownloadTab: React.FC<{
                               {lbl}
                             </Chip>
                           ))}
-                          <span style={{ fontSize: 12, color: "var(--text-2)", marginLeft: 6 }}>Taxa:</span>
+                          <span style={{ fontSize: 12, color: "var(--text-2)", marginLeft: 6 }}>{t.download.sampleRate}</span>
                           {[44100, 48000, 96000].map((hz) => (
                             <Chip
                               key={hz}
                               active={spec.sample_rate_hz === hz}
                               onClick={() => setSpec({ ...spec, sample_rate_hz: hz })}
                             >
-                              {(hz / 1000).toString().replace(".", ",")} kHz
+                              {hz % 1000 === 0 ? hz / 1000 : formatDecimal(hz / 1000, 1)} kHz
                             </Chip>
                           ))}
                         </div>
@@ -1301,12 +1301,12 @@ export const DownloadTab: React.FC<{
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       {/* Profile selector */}
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                        <span style={{ fontSize: 12, color: "var(--text-2)" }}>Perfil:</span>
+                        <span style={{ fontSize: 12, color: "var(--text-2)" }}>{t.download.profile}</span>
                         {(
                           [
-                            ["compatible", "Compatível (MP4 H.264)"],
-                            ["max_quality", "Máxima qualidade (MKV)"],
-                            ["custom", "Personalizado"],
+                            ["compatible", t.download.profileCompatible],
+                            ["max_quality", t.download.profileMax],
+                            ["custom", t.download.profileCustom],
                           ] as [VideoProfile, string][]
                         ).map(([prof, lbl]) => (
                           <Chip
@@ -1321,7 +1321,7 @@ export const DownloadTab: React.FC<{
 
                       {spec.video_profile === "custom" && (
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                          <span style={{ fontSize: 12, color: "var(--text-2)" }}>Contêiner:</span>
+                          <span style={{ fontSize: 12, color: "var(--text-2)" }}>{t.download.container}</span>
                           {(["mp4", "mkv", "webm", "mov"] as const).map((ct) => (
                             <Chip
                               key={ct}
@@ -1337,12 +1337,12 @@ export const DownloadTab: React.FC<{
                       {/* Real probed resolution chips */}
                       {probeResult.video_resolutions.length > 0 && (
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                          <span style={{ fontSize: 12, color: "var(--text-2)" }}>Resolução:</span>
+                          <span style={{ fontSize: 12, color: "var(--text-2)" }}>{t.download.resolution}</span>
                           <Chip
                             active={spec.max_height === null}
                             onClick={() => setSpec({ ...spec, max_height: null })}
                           >
-                            Melhor disponível
+                            {t.download.bestAvailable}
                           </Chip>
                           {Array.from(
                             new Map(probeResult.video_resolutions.map((r) => [r.height, r])).values()
@@ -1374,12 +1374,12 @@ export const DownloadTab: React.FC<{
                       {/* Multiple Audio Languages */}
                       {probeResult.audio_languages.length > 1 && (
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                          <span style={{ fontSize: 12, color: "var(--text-2)" }}>Áudio:</span>
+                          <span style={{ fontSize: 12, color: "var(--text-2)" }}>{t.download.audioTrack}</span>
                           <Chip
                             active={!spec.audio_language || spec.audio_language === "original"}
                             onClick={() => setSpec({ ...spec, audio_language: null })}
                           >
-                            Original
+                            {t.download.formatOriginal}
                           </Chip>
                           {probeResult.audio_languages.map((lang) => (
                             <Chip
@@ -1411,8 +1411,12 @@ export const DownloadTab: React.FC<{
                         >
                           <span style={{ color: "var(--warn)", fontWeight: 600 }}>
                             {compatCodecWarning.lowerH264
-                              ? `${compatCodecWarning.requestedH}p aqui só existe em ${compatCodecWarning.codecs}. MP4 H.264 nativo fica em ${compatCodecWarning.lowerH264}p, ou dá pra manter em MKV / recodificar:`
-                              : `${compatCodecWarning.requestedH}p aqui vem em ${compatCodecWarning.codecs}. Dá pra manter sem reconverter em MKV ou recodificar para MP4 H.264:`}
+                              ? t.download.codecWarnLower(
+                                  compatCodecWarning.requestedH,
+                                  compatCodecWarning.codecs,
+                                  compatCodecWarning.lowerH264
+                                )
+                              : t.download.codecWarn(compatCodecWarning.requestedH, compatCodecWarning.codecs)}
                           </span>
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                             {compatCodecWarning.lowerH264 && (
@@ -1423,7 +1427,7 @@ export const DownloadTab: React.FC<{
                                   setSpec({ ...spec, max_height: compatCodecWarning.lowerH264 })
                                 }
                               >
-                                Usar {compatCodecWarning.lowerH264}p H.264
+                                {t.download.useH264(compatCodecWarning.lowerH264)}
                               </Button>
                             )}
                             <Button
@@ -1433,7 +1437,7 @@ export const DownloadTab: React.FC<{
                                 setSpec({ ...spec, video_profile: "max_quality" })
                               }
                             >
-                              Manter {compatCodecWarning.requestedH}p em MKV
+                              {t.download.keepMkv(compatCodecWarning.requestedH)}
                             </Button>
                             <Button
                               size="sm"
@@ -1453,7 +1457,7 @@ export const DownloadTab: React.FC<{
                                 })
                               }
                             >
-                              Recodificar p/ H.264
+                              {t.download.reencodeH264}
                             </Button>
                           </div>
                         </div>
@@ -1469,7 +1473,7 @@ export const DownloadTab: React.FC<{
                       onClick={() => setExtrasOpen((v) => !v)}
                     >
                       {extrasOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      <Scissors size={13} /> Extras (legendas, corte, SponsorBlock, capítulos)
+                      <Scissors size={13} /> {t.download.extrasToggle}
                     </Button>
                     <Button
                       size="sm"
@@ -1477,7 +1481,7 @@ export const DownloadTab: React.FC<{
                       onClick={() => setWorkshopOpen((v) => !v)}
                     >
                       {workshopOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      <Wrench size={13} /> Oficina FFmpeg
+                      <Wrench size={13} /> {t.download.workshopToggle}
                     </Button>
                   </div>
 
@@ -1500,28 +1504,28 @@ export const DownloadTab: React.FC<{
                             checked={spec.embed_square_cover}
                             disabled={spec.audio_format === "wav" || spec.audio_format === "aiff"}
                             onChange={(v) => setSpec({ ...spec, embed_square_cover: v })}
-                            label="Capa quadrada 1:1"
+                            label={t.download.squareCover}
                           />
                           <Toggle
                             checked={spec.parse_artist_title}
                             onChange={(v) => setSpec({ ...spec, parse_artist_title: v })}
-                            label="Separar 'Artista - Título'"
+                            label={t.download.splitArtistTitle}
                           />
                           <Toggle
                             checked={spec.clean_music_title}
                             onChange={(v) => setSpec({ ...spec, clean_music_title: v })}
-                            label="Limpar sufixos (Official Video)"
+                            label={t.download.cleanTitle}
                           />
                         </div>
                       ) : (
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                            <span style={{ fontSize: 12, color: "var(--text-2)" }}>Legendas:</span>
+                            <span style={{ fontSize: 12, color: "var(--text-2)" }}>{t.download.subtitles}</span>
                             {(
                               [
-                                ["off", "Desligado"],
-                                ["embed", "Embutir no vídeo"],
-                                ["sidecar_srt", "Arquivo .srt ao lado"],
+                                ["off", t.download.subsOff],
+                                ["embed", t.download.subsEmbed],
+                                ["sidecar_srt", t.download.subsSidecar],
                               ] as [SubtitleMode, string][]
                             ).map(([m, l]) => (
                               <Chip
@@ -1536,7 +1540,7 @@ export const DownloadTab: React.FC<{
                               <Toggle
                                 checked={spec.include_auto_subs}
                                 onChange={(v) => setSpec({ ...spec, include_auto_subs: v })}
-                                label="Incluir automáticas"
+                                label={t.download.includeAutoSubs}
                               />
                             )}
                           </div>
@@ -1544,13 +1548,13 @@ export const DownloadTab: React.FC<{
                             <Toggle
                               checked={spec.embed_chapters}
                               onChange={(v) => setSpec({ ...spec, embed_chapters: v })}
-                              label="Embutir capítulos"
+                              label={t.download.embedChapters}
                             />
                             {probeResult.chapters.length > 0 && (
                               <Toggle
                                 checked={spec.split_chapters}
                                 onChange={(v) => setSpec({ ...spec, split_chapters: v })}
-                                label={`Dividir em ${probeResult.chapters.length} capítulos`}
+                                label={t.download.splitChapters(probeResult.chapters.length)}
                               />
                             )}
                           </div>
@@ -1562,7 +1566,7 @@ export const DownloadTab: React.FC<{
                         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <span style={{ fontSize: 12, color: "var(--text-2)" }}>
-                              Cortar trecho:{" "}
+                              {t.download.cutSection}{" "}
                               <strong className="font-mono-num" style={{ color: "var(--text)" }}>
                                 {formatDuration(spec.section_start_s ?? 0)} —{" "}
                                 {formatDuration(spec.section_end_s ?? probeResult.duration_s)}
@@ -1576,7 +1580,7 @@ export const DownloadTab: React.FC<{
                                     onChange={(v) =>
                                       setSpec({ ...spec, force_keyframes_at_cuts: v })
                                     }
-                                    label="Corte preciso"
+                                    label={t.download.preciseCut}
                                   />
                                   <Button
                                     size="sm"
@@ -1589,7 +1593,7 @@ export const DownloadTab: React.FC<{
                                       })
                                     }
                                   >
-                                    Inteiro
+                                    {t.download.wholeMedia}
                                   </Button>
                                 </>
                               )}
@@ -1610,7 +1614,7 @@ export const DownloadTab: React.FC<{
                                 section_end_s: b < Math.round(probeResult.duration_s!) ? b : null,
                               })
                             }
-                            ariaLabel="Intervalo de corte"
+                            ariaLabel={t.download.cutRangeAria}
                           />
                         </div>
                       )}
@@ -1621,9 +1625,9 @@ export const DownloadTab: React.FC<{
                           <span style={{ fontSize: 12, color: "var(--text-2)" }}>SponsorBlock:</span>
                           {(
                             [
-                              ["off", "Desligado"],
-                              ["remove", "Remover trechos"],
-                              ["mark", "Marcar capítulos"],
+                              ["off", t.download.sponsorOff],
+                              ["remove", t.download.sponsorRemove],
+                              ["mark", t.download.sponsorMark],
                             ] as [SponsorBlockAction, string][]
                           ).map(([act, lbl]) => (
                             <Chip
@@ -1643,27 +1647,27 @@ export const DownloadTab: React.FC<{
                               })
                             }
                           >
-                            <Sparkles size={12} /> Clipe musical: remover partes sem música
+                            <Sparkles size={12} /> {t.download.sponsorMusicClip}
                           </Chip>
                         </div>
                         {spec.sponsorblock_action !== "off" && (
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                             {SPONSORBLOCK_CATS.map((cat) => {
-                              const on = spec.sponsorblock_categories.includes(cat.id);
+                              const on = spec.sponsorblock_categories.includes(cat);
                               return (
                                 <Chip
-                                  key={cat.id}
+                                  key={cat}
                                   active={on}
                                   onClick={() =>
                                     setSpec({
                                       ...spec,
                                       sponsorblock_categories: on
-                                        ? spec.sponsorblock_categories.filter((c) => c !== cat.id)
-                                        : [...spec.sponsorblock_categories, cat.id],
+                                        ? spec.sponsorblock_categories.filter((c) => c !== cat)
+                                        : [...spec.sponsorblock_categories, cat],
                                     })
                                   }
                                 >
-                                  {cat.label}
+                                  {t.download.sponsorCats[cat]}
                                 </Chip>
                               );
                             })}
@@ -1675,7 +1679,7 @@ export const DownloadTab: React.FC<{
                         <Toggle
                           checked={spec.concat_playlist}
                           onChange={(v) => setSpec({ ...spec, concat_playlist: v })}
-                          label="Juntar playlist inteira num único arquivo (--concat-playlist)"
+                          label={t.download.concatPlaylist}
                         />
                       )}
                     </div>
@@ -1696,7 +1700,7 @@ export const DownloadTab: React.FC<{
                     >
                       <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                         <span style={{ fontSize: 12, color: "var(--text-2)" }}>
-                          Normalizar volume (2 passadas):
+                          {t.download.normalizeVolume}
                         </span>
                         {[null, -14, -16, -23].map((lufs) => (
                           <Chip
@@ -1709,7 +1713,7 @@ export const DownloadTab: React.FC<{
                               })
                             }
                           >
-                            {lufs === null ? "Original" : `${lufs} LUFS`}
+                            {lufs === null ? t.download.formatOriginal : `${lufs} LUFS`}
                           </Chip>
                         ))}
                       </div>
@@ -1723,10 +1727,10 @@ export const DownloadTab: React.FC<{
                               workshop: { ...spec.workshop, trim_silence: v },
                             })
                           }
-                          label="Cortar silêncio início/fim"
+                          label={t.download.trimSilence}
                         />
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ fontSize: 12, color: "var(--text-2)" }}>Velocidade:</span>
+                          <span style={{ fontSize: 12, color: "var(--text-2)" }}>{t.download.speed}</span>
                           {[null, 0.75, 1.25, 1.5, 2.0].map((spd) => (
                             <Chip
                               key={String(spd)}
@@ -1738,13 +1742,13 @@ export const DownloadTab: React.FC<{
                                 })
                               }
                             >
-                              {spd === null ? "1x" : `${spd}x`}
+                              {spd === null ? "1x" : `${formatNumber(spd, 2)}x`}
                             </Chip>
                           ))}
                         </div>
                         {binsStatus.capabilities.has_rubberband && (
                           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontSize: 12, color: "var(--text-2)" }}>Tom:</span>
+                            <span style={{ fontSize: 12, color: "var(--text-2)" }}>{t.download.pitch}</span>
                             {[-2, -1, null, 1, 2].map((st) => (
                               <Chip
                                 key={String(st)}
@@ -1766,7 +1770,7 @@ export const DownloadTab: React.FC<{
                       {spec.mode === "video" && (
                         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                           <span style={{ fontSize: 12, color: "var(--text-2)" }}>
-                            Comprimir p/ app de mensagem:
+                            {t.download.compressForMessaging}
                           </span>
                           {[null, 10, 16, 25, 50].map((mb) => (
                             <Chip
@@ -1779,7 +1783,7 @@ export const DownloadTab: React.FC<{
                                 })
                               }
                             >
-                              {mb === null ? "Sem meta" : `${mb} MB`}
+                              {mb === null ? t.download.noTarget : `${mb} MB`}
                             </Chip>
                           ))}
                           <Toggle
@@ -1793,7 +1797,7 @@ export const DownloadTab: React.FC<{
                                 },
                               })
                             }
-                            label="Gerar GIF (paleta otimizada)"
+                            label={t.download.makeGif}
                           />
                           {binsStatus.capabilities.has_libass && (
                             <Toggle
@@ -1804,7 +1808,7 @@ export const DownloadTab: React.FC<{
                                   workshop: { ...spec.workshop, burn_subtitles: v },
                                 })
                               }
-                              label="Queimar legenda"
+                              label={t.download.burnSubs}
                             />
                           )}
                         </div>
@@ -1822,7 +1826,7 @@ export const DownloadTab: React.FC<{
                               },
                             })
                           }
-                          label="Transcrever áudio em .srt (Whisper local experimental — modelo base ~148 MB)"
+                          label={t.download.whisper}
                         />
                       )}
                     </div>
@@ -1836,8 +1840,8 @@ export const DownloadTab: React.FC<{
                     {settings.recent_folders.length > 0 && (
                       <Popover.Root>
                         <Popover.Trigger asChild>
-                          <Button size="sm" variant="secondary" title="Pastas recentes">
-                            Recentes
+                          <Button size="sm" variant="secondary" title={t.download.recentFolders}>
+                            {t.download.recent}
                           </Button>
                         </Popover.Trigger>
                         <Popover.Portal>
@@ -1879,21 +1883,21 @@ export const DownloadTab: React.FC<{
                   {/* Primary Action Buttons */}
                   <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", alignItems: "center" }}>
                     <span style={{ fontSize: 11, color: "var(--text-3)", marginRight: "auto" }}>
-                      <Kbd>Enter</Kbd> fila · <Kbd>Ctrl+Enter</Kbd> baixar agora
+                      <Kbd>Enter</Kbd> {t.download.kbdQueue} · <Kbd>Ctrl+Enter</Kbd> {t.download.kbdNow}
                     </span>
                     <Button
                       variant="secondary"
                       size="lg"
                       onClick={() => handleSubmit(false)}
                     >
-                      <ListPlus size={16} /> Adicionar à fila
+                      <ListPlus size={16} /> {t.download.addToQueue}
                     </Button>
                     <Button
                       variant="primary"
                       size="lg"
                       onClick={() => handleSubmit(true)}
                     >
-                      <ArrowDownToLine size={16} /> Baixar agora
+                      <ArrowDownToLine size={16} /> {t.download.downloadNow}
                     </Button>
                   </div>
                 </div>
@@ -1920,7 +1924,7 @@ export const DownloadTab: React.FC<{
                     }}
                   >
                     <div style={{ fontSize: 13, fontWeight: 700 }}>
-                      Itens selecionados: {selectedIndices.size} de {filteredPlaylistEntries.length}
+                      {t.download.selectedItems(selectedIndices.size, filteredPlaylistEntries.length)}
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                       <Button
@@ -1930,25 +1934,25 @@ export const DownloadTab: React.FC<{
                           setSelectedIndices(new Set(filteredPlaylistEntries.map((e) => e.index)))
                         }
                       >
-                        Marcar todos
+                        {t.download.selectAll}
                       </Button>
                       <Button
                         size="sm"
                         variant="secondary"
                         onClick={() => setSelectedIndices(new Set())}
                       >
-                        Desmarcar
+                        {t.download.selectNone}
                       </Button>
                       <input
                         className="op-input font-mono-num"
-                        placeholder="Do #"
+                        placeholder={t.download.rangeFrom}
                         value={rangeFrom}
                         onChange={(e) => setRangeFrom(e.target.value)}
                         style={{ width: 58, height: 28, padding: "0 6px", fontSize: 12 }}
                       />
                       <input
                         className="op-input font-mono-num"
-                        placeholder="Até #"
+                        placeholder={t.download.rangeTo}
                         value={rangeTo}
                         onChange={(e) => setRangeTo(e.target.value)}
                         style={{ width: 58, height: 28, padding: "0 6px", fontSize: 12 }}
@@ -1968,22 +1972,22 @@ export const DownloadTab: React.FC<{
                           );
                         }}
                       >
-                        Aplicar intervalo
+                        {t.download.applyRange}
                       </Button>
                       <Toggle
                         checked={hideShorts}
                         onChange={setHideShorts}
-                        label="Ignorar Shorts"
+                        label={t.download.skipShorts}
                       />
                       <Toggle
                         checked={hideLives}
                         onChange={setHideLives}
-                        label="Ignorar lives"
+                        label={t.download.skipLives}
                       />
                       <Toggle
                         checked={spec.playlist_numbering}
                         onChange={(v) => setSpec({ ...spec, playlist_numbering: v })}
-                        label="Numerar (01 - ...)"
+                        label={t.download.numberItems}
                       />
                     </div>
                   </div>
@@ -2075,7 +2079,7 @@ export const DownloadTab: React.FC<{
               className="font-display"
               style={{ fontSize: 11, color: "var(--text-2)", flexShrink: 0 }}
             >
-              Em andamento
+              {t.download.inProgress}
             </span>
             <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${activeFooterJobs.length}, 1fr)`, gap: 12 }}>
               {activeFooterJobs.map((j) => (

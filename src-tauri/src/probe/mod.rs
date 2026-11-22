@@ -124,7 +124,13 @@ impl ProbeService {
                 code: "drm".to_string(),
                 message_pt: initial_cls
                     .drm_message
-                    .unwrap_or_else(|| "Esse serviço usa DRM. O yt-dlp não baixa daqui.".to_string()),
+                    .unwrap_or_else(|| {
+                    tr!(
+                        "Esse serviço usa DRM. O yt-dlp não baixa daqui.",
+                        "This service uses DRM. yt-dlp can't download from it.",
+                        "Este servicio usa DRM. yt-dlp no puede descargar de aquí."
+                    )
+                }),
                 hint_pt: None,
                 action: crate::errors::ErrorAction::None,
                 transient: false,
@@ -153,7 +159,11 @@ impl ProbeService {
                 .await
                 .map_err(|e| JobError {
                     code: "spawn_error".to_string(),
-                    message_pt: format!("Não foi possível iniciar o yt-dlp: {e}"),
+                    message_pt: tr!(
+                    "Não foi possível iniciar o yt-dlp: {e}",
+                    "Couldn't start yt-dlp: {e}",
+                    "No se pudo iniciar yt-dlp: {e}"
+                ),
                     hint_pt: None,
                     action: crate::errors::ErrorAction::Retry,
                     transient: true,
@@ -195,7 +205,11 @@ impl ProbeService {
 
         let json: serde_json::Value = serde_json::from_str(stdout.trim()).map_err(|e| JobError {
             code: "parse_error".to_string(),
-            message_pt: format!("Resposta inesperada na leitura do link: {e}"),
+            message_pt: tr!(
+                    "Resposta inesperada na leitura do link: {e}",
+                    "Unexpected response while reading the link: {e}",
+                    "Respuesta inesperada al leer el enlace: {e}"
+                ),
             hint_pt: None,
             action: crate::errors::ErrorAction::UpdateYtdlp,
             transient: false,
@@ -323,8 +337,8 @@ async fn parse_probe_json(
             let title = item
                 .get("title")
                 .and_then(|s| s.as_str())
-                .unwrap_or("Item sem título")
-                .to_string();
+                .map(str::to_string)
+                .unwrap_or_else(|| tr!("Item sem título", "Untitled item", "Elemento sin título"));
             let duration_s = item.get("duration").and_then(|n| n.as_f64());
             let live_status = item.get("live_status").and_then(|s| s.as_str()).unwrap_or("");
             let is_live = item.get("is_live").and_then(|b| b.as_bool()).unwrap_or(false)
@@ -379,10 +393,10 @@ async fn parse_probe_json(
     let raw_title = v
         .get("title")
         .and_then(|s| s.as_str())
-        .unwrap_or("Sem título");
+        .unwrap_or("");
     let collapsed_title = raw_title.split_whitespace().collect::<Vec<_>>().join(" ");
     let title = if collapsed_title.is_empty() {
-        "Sem título".to_string()
+        tr!("Sem título", "Untitled", "Sin título")
     } else {
         collapsed_title
     };
@@ -589,8 +603,8 @@ async fn parse_probe_json(
             let title = ch
                 .get("title")
                 .and_then(|s| s.as_str())
-                .unwrap_or("Capítulo")
-                .to_string();
+                .map(str::to_string)
+                .unwrap_or_else(|| tr!("Capítulo", "Chapter", "Capítulo"));
             let start_time = ch.get("start_time").and_then(|n| n.as_f64()).unwrap_or(0.0);
             let end_time = ch.get("end_time").and_then(|n| n.as_f64()).unwrap_or(start_time);
             chapters.push(ChapterInfo {

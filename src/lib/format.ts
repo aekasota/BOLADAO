@@ -18,6 +18,7 @@ import {
   siApplemusic,
 } from "simple-icons";
 import { SourceKind, SpeedUnit } from "./ipc";
+import { formatDecimal, getT } from "../i18n";
 
 const BRAND_PATHS: Record<string, string> = {
   youtube: siYoutube.path,
@@ -43,35 +44,8 @@ export function getBrandSvgPath(slug: string): string | null {
   return BRAND_PATHS[slug] ?? null;
 }
 
-export function formatKindPt(kind: SourceKind): string {
-  switch (kind) {
-    case "video":
-      return "vídeo";
-    case "short":
-      return "Short";
-    case "reel":
-      return "Reel";
-    case "track":
-      return "faixa";
-    case "album":
-      return "álbum";
-    case "playlist":
-      return "playlist";
-    case "playlist_item":
-      return "item";
-    case "channel":
-      return "canal";
-    case "live":
-      return "live";
-    case "clip":
-      return "clipe";
-    case "story":
-      return "Story";
-    case "post":
-      return "post";
-    case "drm":
-      return "DRM";
-  }
+export function formatKind(kind: SourceKind): string {
+  return getT().kinds[kind];
 }
 
 export function formatBytes(bytes: number | null | undefined): string {
@@ -80,29 +54,29 @@ export function formatBytes(bytes: number | null | undefined): string {
   const mb = kb * 1024;
   const gb = mb * 1024;
   if (bytes >= gb) {
-    return `${(bytes / gb).toFixed(2).replace(".", ",")} GB`;
+    return `${formatDecimal(bytes / gb, 2)} GB`;
   }
   if (bytes >= mb) {
     const val = bytes / mb;
-    return `${(val >= 100 ? val.toFixed(0) : val.toFixed(1)).replace(".", ",")} MB`;
+    return `${formatDecimal(val, val >= 100 ? 0 : 1)} MB`;
   }
   return `${Math.max(1, Math.round(bytes / kb))} KB`;
 }
 
 export function formatSpeedPrimary(bps: number, unit: SpeedUnit = "bytes_per_sec"): string {
   if (!bps || bps < 512) {
-    return unit === "bits_per_sec" ? "0,0 Mbps" : "0,0 MB/s";
+    return `${formatDecimal(0, 1)} ${unit === "bits_per_sec" ? "Mbps" : "MB/s"}`;
   }
   if (unit === "bits_per_sec") {
     const mbps = (bps * 8) / 1_000_000;
     if (mbps < 1) return `${Math.round((bps * 8) / 1000)} Kbps`;
-    return `${mbps.toFixed(1).replace(".", ",")} Mbps`;
+    return `${formatDecimal(mbps, 1)} Mbps`;
   }
   const mbs = bps / (1024 * 1024);
   if (mbs < 0.95) {
     return `${Math.round(bps / 1024)} KB/s`;
   }
-  return `${mbs.toFixed(1).replace(".", ",")} MB/s`;
+  return `${formatDecimal(mbs, 1)} MB/s`;
 }
 
 /** Formats bandwidth in BOTH ISP units (Mbps) and OS units (MB/s), e.g. "5,0 MB/s · 42 Mbps" (Section 11.3). */

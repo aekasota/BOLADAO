@@ -78,12 +78,12 @@ fn run_dir(dir: &Path) -> PathBuf {
 
 fn save_store_in(dir: &Path, key: &str, plaintext: &str) -> Result<(), String> {
     let blob = dpapi_protect(plaintext.as_bytes())?;
-    fs::create_dir_all(dir).map_err(|e| format!("Erro criando a pasta de cookies: {e}"))?;
+    fs::create_dir_all(dir).map_err(|e| tr!("Erro criando a pasta de cookies: {e}", "Error creating the cookies folder: {e}", "Error al crear la carpeta de cookies: {e}"))?;
     let tmp = dir.join(format!("{key}.{}.tmp", Uuid::new_v4().simple()));
-    fs::write(&tmp, blob).map_err(|e| format!("Erro salvando cookies: {e}"))?;
+    fs::write(&tmp, blob).map_err(|e| tr!("Erro salvando cookies: {e}", "Error saving cookies: {e}", "Error al guardar las cookies: {e}"))?;
     fs::rename(&tmp, store_file(dir, key)).map_err(|e| {
         let _ = fs::remove_file(&tmp);
-        format!("Erro salvando cookies: {e}")
+        tr!("Erro salvando cookies: {e}", "Error saving cookies: {e}", "Error al guardar las cookies: {e}")
     })?;
     let _ = fs::remove_file(legacy_file(dir, key));
     Ok(())
@@ -228,9 +228,11 @@ fn dpapi_protect(plain: &[u8]) -> Result<Vec<u8>, String> {
             &mut out,
         );
         if ok == 0 {
-            return Err(format!(
-                "O Windows não conseguiu criptografar os cookies: {}",
-                std::io::Error::last_os_error()
+            let err = std::io::Error::last_os_error();
+            return Err(tr!(
+                "O Windows não conseguiu criptografar os cookies: {err}",
+                "Windows couldn't encrypt the cookies: {err}",
+                "Windows no pudo cifrar las cookies: {err}"
             ));
         }
         let blob = std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec();
@@ -262,9 +264,11 @@ fn dpapi_unprotect(blob: &[u8]) -> Result<Vec<u8>, String> {
             &mut out,
         );
         if ok == 0 {
-            return Err(format!(
-                "O Windows não conseguiu abrir os cookies salvos: {}",
-                std::io::Error::last_os_error()
+            let err = std::io::Error::last_os_error();
+            return Err(tr!(
+                "O Windows não conseguiu abrir os cookies salvos: {err}",
+                "Windows couldn't open the saved cookies: {err}",
+                "Windows no pudo abrir las cookies guardadas: {err}"
             ));
         }
         let plain = std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec();
@@ -391,8 +395,10 @@ pub fn open_isolated_login_window(app: &AppHandle, platform_id: &str) -> Result<
     };
 
     WebviewWindowBuilder::new(app, &label, WebviewUrl::External(parsed_url))
-        .title(format!(
-            "Entrar em {display_name} — depois clique em 'Concluir login' no Boladão"
+        .title(tr!(
+            "Entrar em {display_name} — depois clique em 'Concluir login' no Boladão",
+            "Sign in to {display_name}, then click 'Finish sign-in' in Boladão",
+            "Inicia sesión en {display_name} y después haz clic en 'Finalizar inicio de sesión' en Boladão"
         ))
         .inner_size(520.0, 680.0)
         .center()
@@ -400,7 +406,7 @@ pub fn open_isolated_login_window(app: &AppHandle, platform_id: &str) -> Result<
         .user_agent(ua)
         .data_directory(profile_dir)
         .build()
-        .map_err(|e| format!("Não foi possível abrir janela de login: {e}"))?;
+        .map_err(|e| tr!("Não foi possível abrir janela de login: {e}", "Couldn't open the sign-in window: {e}", "No se pudo abrir la ventana de inicio de sesión: {e}"))?;
 
     Ok(label)
 }
@@ -419,7 +425,7 @@ pub fn harvest_login_window_cookies(
     let label = format!("login-{key}");
     let win = app
         .get_webview_window(&label)
-        .ok_or_else(|| "A janela de login não está aberta. Clique em 'Entrar' primeiro.".to_string())?;
+        .ok_or_else(|| tr!("A janela de login não está aberta. Clique em 'Entrar' primeiro.", "The sign-in window isn't open. Click 'Sign in' first.", "La ventana de inicio de sesión no está abierta. Haz clic en 'Iniciar sesión' primero."))?;
 
     let (_, target_urls) = platform_login_urls(key);
     let mut entries = Vec::new();
@@ -429,7 +435,7 @@ pub fn harvest_login_window_cookies(
         let parsed: url::Url = raw_u.parse().map_err(|e: url::ParseError| e.to_string())?;
         let cookies = win
             .cookies_for_url(parsed)
-            .map_err(|e| format!("Falha ao ler cookies da janela: {e}"))?;
+            .map_err(|e| tr!("Falha ao ler cookies da janela: {e}", "Couldn't read the cookies from the window: {e}", "No se pudieron leer las cookies de la ventana: {e}"))?;
         for c in cookies {
             let domain = c.domain().unwrap_or("").to_string();
             if domain.is_empty() {
@@ -457,7 +463,7 @@ pub fn harvest_login_window_cookies(
     }
 
     if entries.is_empty() {
-        return Err("Nenhum cookie encontrado ainda. Conclua o login na janela aberta antes de confirmar.".to_string());
+        return Err(tr!("Nenhum cookie encontrado ainda. Conclua o login na janela aberta antes de confirmar.", "No cookies found yet. Finish signing in on the open window before confirming.", "Todavía no hay cookies. Termina de iniciar sesión en la ventana abierta antes de confirmar."));
     }
 
     let formatted = format_netscape_cookies_txt(&entries);
@@ -481,11 +487,11 @@ pub fn import_cookies_txt_file(platform_id: &str, src_path: &Path) -> Result<Con
         platform_id
     };
     let raw = fs::read_to_string(src_path)
-        .map_err(|e| format!("Não foi possível ler o arquivo de cookies: {e}"))?;
+        .map_err(|e| tr!("Não foi possível ler o arquivo de cookies: {e}", "Couldn't read the cookies file: {e}", "No se pudo leer el archivo de cookies: {e}"))?;
 
     let (count, earliest_exp) = netscape_cookie_stats(&raw);
     if count == 0 {
-        return Err("Esse arquivo não parece ser um cookies.txt no formato Netscape.".to_string());
+        return Err(tr!("Esse arquivo não parece ser um cookies.txt no formato Netscape.", "This file doesn't look like a cookies.txt in Netscape format.", "Este archivo no parece un cookies.txt en formato Netscape."));
     }
 
     save_store_in(&cookies_dir(), key, &raw)?;

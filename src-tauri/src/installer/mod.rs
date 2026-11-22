@@ -150,7 +150,7 @@ pub fn ensure_webview2_or_bootstrap() -> bool {
 
 /// Copies `src_exe` to `dst_exe`, stripping the 16-byte `BOLADAO_INSTALL!` trailer if present so the installed binary opens in normal App mode.
 pub fn copy_clean_executable(src_exe: &Path, dst_exe: &Path) -> Result<(), String> {
-    let meta = fs::metadata(src_exe).map_err(|e| format!("Erro lendo executável: {e}"))?;
+    let meta = fs::metadata(src_exe).map_err(|e| tr!("Erro lendo executável: {e}", "Error reading the executable: {e}", "Error al leer el ejecutable: {e}"))?;
     let copy_len = if has_installer_magic(src_exe) {
         meta.len().saturating_sub(16)
     } else {
@@ -158,21 +158,27 @@ pub fn copy_clean_executable(src_exe: &Path, dst_exe: &Path) -> Result<(), Strin
     };
 
     if let Some(parent) = dst_exe.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("Erro criando pasta {}: {e}", parent.display()))?;
+        fs::create_dir_all(parent).map_err(|e| {
+            let dir = parent.display();
+            tr!("Erro criando pasta {dir}: {e}", "Error creating folder {dir}: {e}", "Error al crear la carpeta {dir}: {e}")
+        })?;
     }
 
     let tmp_dst = dst_exe.with_extension("exe.installing");
     {
-        let src_file = File::open(src_exe).map_err(|e| format!("Erro abrindo origem: {e}"))?;
+        let src_file = File::open(src_exe).map_err(|e| tr!("Erro abrindo origem: {e}", "Error opening the source: {e}", "Error al abrir el origen: {e}"))?;
         let dst_file = File::create(&tmp_dst)
-            .map_err(|e| format!("Erro criando {}: {e}", tmp_dst.display()))?;
+            .map_err(|e| {
+                let path = tmp_dst.display();
+                tr!("Erro criando {path}: {e}", "Error creating {path}: {e}", "Error al crear {path}: {e}")
+            })?;
         let mut reader = BufReader::with_capacity(512 * 1024, src_file.take(copy_len));
         let mut writer = BufWriter::with_capacity(512 * 1024, dst_file);
         std::io::copy(&mut reader, &mut writer)
-            .map_err(|e| format!("Erro copiando binário: {e}"))?;
+            .map_err(|e| tr!("Erro copiando binário: {e}", "Error copying the binary: {e}", "Error al copiar el binario: {e}"))?;
         writer
             .flush()
-            .map_err(|e| format!("Erro gravando binário no disco: {e}"))?;
+            .map_err(|e| tr!("Erro gravando binário no disco: {e}", "Error writing the binary to disk: {e}", "Error al escribir el binario en el disco: {e}"))?;
     }
 
     if dst_exe.exists() && fs::remove_file(dst_exe).is_err() {
@@ -183,9 +189,11 @@ pub fn copy_clean_executable(src_exe: &Path, dst_exe: &Path) -> Result<(), Strin
     }
 
     fs::rename(&tmp_dst, dst_exe).map_err(|e| {
-        format!(
-            "Não foi possível atualizar {} (feche o Boladão se estiver aberto): {e}",
-            dst_exe.display()
+        let path = dst_exe.display();
+        tr!(
+            "Não foi possível atualizar {path} (feche o Boladão se estiver aberto): {e}",
+            "Couldn't update {path} (close Boladão if it is open): {e}",
+            "No se pudo actualizar {path} (cierra Boladão si está abierto): {e}"
         )
     })
 }
@@ -247,14 +255,24 @@ pub async fn run_install_pipeline(
     create_desktop_shortcut: bool,
     create_start_menu_shortcut: bool,
 ) -> Result<PathBuf, String> {
-    emit_progress(&app, 0.06, "Preparando diretório de instalação...", false, None, None);
+    emit_progress(
+        &app,
+        0.06,
+        &tr!("Preparando diretório de instalação...", "Preparing the install folder...", "Preparando la carpeta de instalación..."),
+        false,
+        None,
+        None,
+    );
 
     let install_dir_clone = install_dir.clone();
     let target_exe = tokio::task::spawn_blocking(move || -> Result<PathBuf, String> {
         fs::create_dir_all(&install_dir_clone)
-            .map_err(|e| format!("Não foi possível criar {}: {e}", install_dir_clone.display()))?;
+            .map_err(|e| {
+                let dir = install_dir_clone.display();
+                tr!("Não foi possível criar {dir}: {e}", "Couldn't create {dir}: {e}", "No se pudo crear {dir}: {e}")
+            })?;
         let cur_exe =
-            env::current_exe().map_err(|e| format!("Erro localizando instalador: {e}"))?;
+            env::current_exe().map_err(|e| tr!("Erro localizando instalador: {e}", "Error locating the installer: {e}", "Error al localizar el instalador: {e}"))?;
         let dst_exe = install_dir_clone.join("Boladão.exe");
         // Clean legacy lowercase binary if upgrading from older NSIS install
         let legacy_lower = install_dir_clone.join("boladao.exe");
@@ -271,7 +289,11 @@ pub async fn run_install_pipeline(
     emit_progress(
         &app,
         0.28,
-        "Criando pastas Músicas\\Boladão, Vídeos\\Boladão e banco local...",
+        &tr!(
+            "Criando pastas Músicas\\Boladão, Vídeos\\Boladão e banco local...",
+            "Creating Music\\Boladão, Videos\\Boladão and the local database...",
+            "Creando las carpetas Música\\Boladão, Videos\\Boladão y la base local..."
+        ),
         false,
         None,
         None,
@@ -290,7 +312,7 @@ pub async fn run_install_pipeline(
     emit_progress(
         &app,
         0.46,
-        "Extraindo motores embutidos (yt-dlp, Deno, FFmpeg 9.0.2)...",
+        &tr!("Extraindo motores embutidos (yt-dlp, Deno, FFmpeg 9.0.2)...", "Extracting built-in engines (yt-dlp, Deno, FFmpeg 9.0.2)...", "Extrayendo los motores incluidos (yt-dlp, Deno, FFmpeg 9.0.2)..."),
         false,
         None,
         None,
@@ -302,7 +324,7 @@ pub async fn run_install_pipeline(
     emit_progress(
         &app,
         0.86,
-        "Criando atalhos e registrando nos Aplicativos do Windows...",
+        &tr!("Criando atalhos e registrando nos Aplicativos do Windows...", "Creating shortcuts and registering in Windows Apps...", "Creando accesos directos y registrando en las Aplicaciones de Windows..."),
         false,
         None,
         None,
@@ -330,7 +352,7 @@ pub async fn run_install_pipeline(
     emit_progress(
         &app,
         1.0,
-        "Instalação concluída! Tudo pronto para usar.",
+        &tr!("Instalação concluída! Tudo pronto para usar.", "Installation complete! Everything is ready.", "¡Instalación completada! Todo listo para usar."),
         true,
         Some(target_exe.clone()),
         None,
@@ -381,7 +403,7 @@ pub async fn run_uninstall_pipeline(
 
 pub fn launch_installed_app_and_close(app: &AppHandle, installed_exe: &Path) -> Result<(), String> {
     if !installed_exe.is_file() {
-        return Err("Executável instalado não encontrado.".to_string());
+        return Err(tr!("Executável instalado não encontrado.", "Installed executable not found.", "No se encontró el ejecutable instalado."));
     }
     let parent = installed_exe
         .parent()
@@ -389,7 +411,7 @@ pub fn launch_installed_app_and_close(app: &AppHandle, installed_exe: &Path) -> 
     std::process::Command::new(installed_exe)
         .current_dir(parent)
         .spawn()
-        .map_err(|e| format!("Falha ao iniciar Boladão: {e}"))?;
+        .map_err(|e| tr!("Falha ao iniciar Boladão: {e}", "Couldn't start Boladão: {e}", "No se pudo iniciar Boladão: {e}"))?;
     app.exit(0);
     Ok(())
 }
@@ -425,7 +447,7 @@ $s = $ws.CreateShortcut($env:BOLADAO_LNK)
 $s.TargetPath = $env:BOLADAO_EXE
 $s.WorkingDirectory = $env:BOLADAO_DIR
 $s.IconLocation = "$($env:BOLADAO_EXE),0"
-$s.Description = "Boladão — Downloader de vídeo e áudio"
+$s.Description = $env:BOLADAO_DESC
 $s.Save()
 "#;
         let status = std::process::Command::new("powershell.exe")
@@ -433,11 +455,19 @@ $s.Save()
             .env("BOLADAO_LNK", lnk_path)
             .env("BOLADAO_EXE", target_exe)
             .env("BOLADAO_DIR", work_dir)
+            .env(
+                "BOLADAO_DESC",
+                tr!(
+                    "Boladão — Downloader de vídeo e áudio",
+                    "Boladão — Video and audio downloader",
+                    "Boladão — Descargador de video y audio"
+                ),
+            )
             .creation_flags(CREATE_NO_WINDOW_FLAG)
             .status()
-            .map_err(|e| format!("Erro criando atalho: {e}"))?;
+            .map_err(|e| tr!("Erro criando atalho: {e}", "Error creating the shortcut: {e}", "Error al crear el acceso directo: {e}"))?;
         if !status.success() {
-            return Err("Falha ao gravar atalho .lnk do Windows.".to_string());
+            return Err(tr!("Falha ao gravar atalho .lnk do Windows.", "Couldn't write the Windows .lnk shortcut.", "No se pudo guardar el acceso directo .lnk de Windows."));
         }
         Ok(())
     }
@@ -505,7 +535,11 @@ fn register_windows_uninstaller(install_dir: &Path, target_exe: &Path) -> Result
             std::ptr::null_mut(),
         );
         if status != 0 {
-            return Err(format!("Erro registrando aplicativo no Windows (código {status})."));
+            return Err(tr!(
+                "Erro registrando aplicativo no Windows (código {status}).",
+                "Error registering the app in Windows (code {status}).",
+                "Error al registrar la aplicación en Windows (código {status})."
+            ));
         }
 
         let icon_str = format!("\"{}\",0", target_exe.display());

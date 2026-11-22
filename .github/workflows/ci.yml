@@ -1,0 +1,59 @@
+name: CI
+
+# Checks every push to main and every pull request: frontend types and build, then the Rust tests.
+# Runs on Windows, the only platform Boladão targets.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Type-check and build the frontend
+        run: npm run build
+
+      - name: Frontend tests
+        run: npm test
+
+      # yt-dlp, Deno, FFmpeg and the WebView2 bootstrapper are embedded at build time.
+      - name: Cache engines
+        uses: actions/cache@v4
+        with:
+          path: |
+            vendor/cache
+            vendor/bin
+          key: engines-${{ hashFiles('vendor/manifest.json', 'scripts/fetch-binaries.ps1') }}
+
+      - name: Fetch engines (pinned versions, checksums and signatures verified)
+        shell: powershell
+        run: ./scripts/fetch-binaries.ps1
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml

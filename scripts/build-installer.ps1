@@ -1,5 +1,15 @@
 ﻿$ErrorActionPreference = "Stop"
 
+function Assert-MicrosoftSignature {
+    param([string]$Path)
+    # Authenticode válido e assinado pela Microsoft; qualquer outra coisa não entra no instalador.
+    $sig = Get-AuthenticodeSignature -FilePath $Path
+    $subject = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { "" }
+    if ($sig.Status -ne "Valid" -or $subject -notmatch "O=Microsoft Corporation") {
+        throw "Assinatura inválida em $Path (status: $($sig.Status); assinante: $subject). O arquivo não pode ir para o instalador."
+    }
+}
+
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $RepoRoot
 
@@ -11,11 +21,22 @@ try {
         & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "fetch-binaries.ps1")
     }
 
-    if (-not (Test-Path "vendor\bin\webview2\MicrosoftEdgeWebview2Setup.exe")) {
+    $Wv2Exe = "vendor\bin\webview2\MicrosoftEdgeWebview2Setup.exe"
+    if (-not (Test-Path $Wv2Exe)) {
         Write-Host "Baixando bootstrapper oficial do Microsoft Edge WebView2..." -ForegroundColor Cyan
         New-Item -ItemType Directory -Force -Path "vendor\bin\webview2" | Out-Null
-        Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile "vendor\bin\webview2\MicrosoftEdgeWebview2Setup.exe"
+        $Wv2Download = "vendor\bin\webview2\MicrosoftEdgeWebview2Setup.download.exe"
+        Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/p/?LinkId=2124703" -OutFile $Wv2Download
+        try {
+            Assert-MicrosoftSignature $Wv2Download
+        } catch {
+            Remove-Item -Force $Wv2Download
+            throw
+        }
+        Move-Item -Force $Wv2Download $Wv2Exe
     }
+    # O bootstrapper vai embutido no instalador: confere a assinatura a cada build.
+    Assert-MicrosoftSignature $Wv2Exe
 
     if (-not (Test-Path "node_modules")) {
         Write-Host "Instalando dependências do frontend (npm install)..." -ForegroundColor Cyan

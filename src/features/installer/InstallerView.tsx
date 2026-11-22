@@ -21,12 +21,14 @@ import {
   StripeProgress,
   Toggle,
 } from "../../ui/Primitives";
+import { useT } from "../../i18n";
 
 interface Props {
   launchMode: Extract<LaunchMode, { mode: "installer" } | { mode: "uninstaller" }>;
 }
 
 export const InstallerView: React.FC<Props> = ({ launchMode }) => {
+  const t = useT();
   const fireRipple = useAppStore((s) => s.fireRipple);
 
   const isUninstaller = launchMode.mode === "uninstaller";
@@ -37,7 +39,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
 
   const [phase, setPhase] = useState<"ready" | "running" | "done" | "error">("ready");
   const [pct, setPct] = useState(0);
-  const [stage, setStage] = useState("Iniciando...");
+  const [stage, setStage] = useState(() => t.installer.starting);
   const [installedExe, setInstalledExe] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -89,7 +91,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
       directory: true,
       multiple: false,
       defaultPath: installDir,
-      title: "Escolher pasta de instalação do Boladão",
+      title: t.installer.pickFolderTitle,
     });
     if (typeof selected === "string" && selected.trim()) {
       const clean = selected.replace(/[\\/]+$/, "");
@@ -104,7 +106,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
     setErrorMsg(null);
     setPhase("running");
     setPct(0.04);
-    setStage("Preparando instalação...");
+    setStage(t.installer.preparing);
     try {
       const exePath = await api.installBoladao(
         installDir,
@@ -126,7 +128,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
     setErrorMsg(null);
     setPhase("running");
     setPct(0.45);
-    setStage("Removendo arquivos, atalhos e binários extraídos...");
+    setStage(t.installer.removing);
     try {
       await api.uninstallBoladao(launchMode.target_dir, removeUserData);
       setPct(1);
@@ -183,7 +185,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
           </span>
         </div>
 
-        <nav aria-label="Modo do instalador" className="notch-dock">
+        <nav aria-label={t.installer.modeNav} className="notch-dock">
           <svg
             className="notch-ear notch-ear-left"
             viewBox="0 0 14 14"
@@ -209,7 +211,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
               letterSpacing: "0.03em",
             }}
           >
-            {isUninstaller ? "DESINSTALAR" : "INSTALADOR"}
+            {isUninstaller ? t.installer.uninstallTab : t.installer.installerTab}
           </div>
 
           <svg
@@ -231,7 +233,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
           <button
             type="button"
             onClick={winMinimize}
-            aria-label="Minimizar"
+            aria-label={t.app.window.minimize}
             className="win-ctrl-btn"
           >
             <Minus size={13} />
@@ -239,7 +241,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
           <button
             type="button"
             onClick={winClose}
-            aria-label="Fechar"
+            aria-label={t.app.window.close}
             disabled={phase === "running"}
             className="win-ctrl-btn win-ctrl-close"
             style={{ opacity: phase === "running" ? 0.4 : 1 }}
@@ -282,14 +284,15 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     <h1 className="font-display" style={{ margin: 0, fontSize: 21 }}>
                       {defaults?.already_installed
-                        ? "Atualizar ou Reinstalar Boladão"
-                        : "Instalar Boladão"}
+                        ? t.installer.titleUpdate
+                        : t.installer.titleInstall}
                     </h1>
                     <div style={{ fontSize: 13, color: "var(--text-2)" }}>
-                      Tudo já vem embutido neste único executável: aplicativo,{" "}
+                      {t.installer.bundleBefore}{" "}
                       <strong style={{ color: "var(--text)" }}>yt-dlp</strong>,{" "}
                       <strong style={{ color: "var(--text)" }}>Deno</strong>,{" "}
-                      <strong style={{ color: "var(--text)" }}>FFmpeg 9.0.2</strong> e pastas de mídia.
+                      <strong style={{ color: "var(--text)" }}>FFmpeg 9.0.2</strong> {t.installer.and}{" "}
+                      {t.installer.bundleAfter}
                     </div>
                   </div>
 
@@ -298,11 +301,11 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
                       className="font-display"
                       style={{ fontSize: 11.5, color: "var(--text-2)", letterSpacing: "0.02em" }}
                     >
-                      Pasta de instalação
+                      {t.installer.installFolder}
                     </span>
                     <PathPreview path={installDir} onClick={pickInstallFolder} />
                     <span className="font-mono-num" style={{ fontSize: 11, color: "var(--text-3)" }}>
-                      Pastas de mídia criadas automaticamente: Músicas\Boladão · Vídeos\Boladão
+                      {t.installer.mediaFolders}
                     </span>
                   </div>
 
@@ -324,7 +327,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
                       <Toggle
                         checked={desktopShortcut}
                         onChange={setDesktopShortcut}
-                        label="Atalho na Área de Trabalho"
+                        label={t.installer.desktopShortcut}
                       />
                     </div>
                     <div
@@ -338,7 +341,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
                       <Toggle
                         checked={startMenuShortcut}
                         onChange={setStartMenuShortcut}
-                        label="Atalho no Menu Iniciar"
+                        label={t.installer.startMenuShortcut}
                       />
                     </div>
                   </div>
@@ -402,7 +405,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
                       style={{ fontSize: 13, letterSpacing: "0.02em", padding: "0 22px" }}
                     >
                       <Download size={16} />
-                      {defaults?.already_installed ? "ATUALIZAR AGORA" : "INSTALAR AGORA"}
+                      {defaults?.already_installed ? t.installer.updateNow : t.installer.installNow}
                     </Button>
                   </div>
                 </>
@@ -411,10 +414,10 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
               {phase === "running" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "8px 0" }}>
                   <div className="font-display" style={{ fontSize: 20 }}>
-                    Instalando Boladão
+                    {t.installer.installing}
                   </div>
                   <div style={{ fontSize: 13, color: "var(--text-2)" }}>
-                    Configurando executável, atalhos, pastas e descomprimindo motores locais...
+                    {t.installer.installingBody}
                   </div>
                   <StripeProgress
                     pct={pct}
@@ -457,10 +460,10 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
                     </div>
                     <div>
                       <h2 className="font-display" style={{ margin: 0, fontSize: 20 }}>
-                        Instalação concluída
+                        {t.installer.doneTitle}
                       </h2>
                       <div style={{ fontSize: 13, color: "var(--text-2)" }}>
-                        Atalhos, pastas de mídia e motores já estão prontos para uso imediato.
+                        {t.installer.doneBody}
                       </div>
                     </div>
                   </div>
@@ -479,12 +482,12 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
                       whiteSpace: "nowrap",
                     }}
                   >
-                    Instalado em: {installedExe || `${installDir}\\Boladão.exe`}
+                    {t.installer.installedAt(installedExe || `${installDir}\\Boladão.exe`)}
                   </div>
 
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
                     <Button variant="secondary" onClick={winClose}>
-                      Concluir
+                      {t.installer.finish}
                     </Button>
                     <Button
                       variant="primary"
@@ -496,7 +499,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
                         api.launchInstalledBoladao(exe);
                       }}
                     >
-                      <Play size={15} /> ABRIR BOLADÃO
+                      <Play size={15} /> {t.installer.openApp}
                     </Button>
                   </div>
                 </div>
@@ -505,7 +508,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
               {phase === "error" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <div className="font-display" style={{ fontSize: 19, color: "var(--warn)" }}>
-                    Falha na instalação
+                    {t.installer.failedTitle}
                   </div>
                   <div
                     className="font-mono-num"
@@ -522,10 +525,10 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
                   </div>
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
                     <Button variant="secondary" onClick={() => setPhase("ready")}>
-                      Voltar
+                      {t.installer.back}
                     </Button>
                     <Button variant="primary" onClick={handleInstall}>
-                      Tentar novamente
+                      {t.installer.tryAgain}
                     </Button>
                   </div>
                 </div>
@@ -538,13 +541,14 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
                 <>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                     <h1 className="font-display" style={{ margin: 0, fontSize: 20 }}>
-                      Desinstalar Boladão
+                      {t.installer.uninstallTitle}
                     </h1>
                     <div style={{ fontSize: 13, color: "var(--text-2)" }}>
-                      Suas músicas e vídeos baixados em{" "}
-                      <strong style={{ color: "var(--text)" }}>Músicas\Boladão</strong> e{" "}
-                      <strong style={{ color: "var(--text)" }}>Vídeos\Boladão</strong> nunca são
-                      apagados.
+                      {t.installer.keepBefore}{" "}
+                      <strong style={{ color: "var(--text)" }}>{t.installer.musicFolder}</strong>{" "}
+                      {t.installer.and}{" "}
+                      <strong style={{ color: "var(--text)" }}>{t.installer.videosFolder}</strong>{" "}
+                      {t.installer.keepAfter}
                     </div>
                   </div>
 
@@ -559,13 +563,13 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
                     <Toggle
                       checked={removeUserData}
                       onChange={setRemoveUserData}
-                      label="Apagar também configurações, fila e cookies salvos"
+                      label={t.installer.removeData}
                     />
                   </div>
 
                   <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
                     <Button variant="secondary" onClick={winClose}>
-                      Cancelar
+                      {t.installer.cancel}
                     </Button>
                     <Button
                       variant="primary"
@@ -573,7 +577,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
                       className="font-display"
                       style={{ fontSize: 12.5, letterSpacing: "0.02em" }}
                     >
-                      <Trash2 size={15} /> DESINSTALAR
+                      <Trash2 size={15} /> {t.installer.uninstallButton}
                     </Button>
                   </div>
                 </>
@@ -582,7 +586,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
               {phase === "running" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <div className="font-display" style={{ fontSize: 19 }}>
-                    Removendo Boladão...
+                    {t.installer.removingTitle}
                   </div>
                   <StripeProgress
                     pct={pct}
@@ -599,10 +603,10 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
               {phase === "done" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <div className="font-display" style={{ fontSize: 20 }}>
-                    Boladão desinstalado
+                    {t.installer.uninstalledTitle}
                   </div>
                   <div style={{ fontSize: 13, color: "var(--text-2)" }}>
-                    O aplicativo, atalhos e binários internos foram removidos com sucesso.
+                    {t.installer.uninstalledBody}
                   </div>
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
                     <Button
@@ -611,7 +615,7 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
                       className="font-display"
                       style={{ fontSize: 12.5 }}
                     >
-                      FECHAR
+                      {t.installer.closeButton}
                     </Button>
                   </div>
                 </div>
@@ -620,14 +624,14 @@ export const InstallerView: React.FC<Props> = ({ launchMode }) => {
               {phase === "error" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <div className="font-display" style={{ fontSize: 18, color: "var(--warn)" }}>
-                    Erro ao desinstalar
+                    {t.installer.uninstallError}
                   </div>
                   <div className="font-mono-num" style={{ fontSize: 12 }}>
                     {errorMsg}
                   </div>
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
                     <Button variant="secondary" onClick={winClose}>
-                      Fechar
+                      {t.installer.close}
                     </Button>
                   </div>
                 </div>

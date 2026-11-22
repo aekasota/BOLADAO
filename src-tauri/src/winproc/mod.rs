@@ -84,7 +84,7 @@ impl JobGroup {
         unsafe {
             use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
             let raw = child.raw_handle().ok_or_else(|| {
-                io::Error::new(io::ErrorKind::Other, "o processo já foi encerrado e não tem mais handle")
+                io::Error::new(io::ErrorKind::Other, tr!("o processo já foi encerrado e não tem mais handle", "the process has already ended and has no handle", "el proceso ya terminó y no tiene handle"))
             })?;
             if AssignProcessToJobObject(self.handle as *mut _, raw as *mut _) == 0 {
                 return Err(io::Error::last_os_error());
@@ -189,7 +189,11 @@ where
         tracing_or_log(&format!("Processo encerrado: não entrou no Job Object ({err})"));
         return Err(io::Error::new(
             err.kind(),
-            format!("não foi possível isolar o processo no Job Object do Windows: {err}"),
+            tr!(
+                    "não foi possível isolar o processo no Job Object do Windows: {err}",
+                    "couldn't isolate the process in a Windows Job Object: {err}",
+                    "no se pudo aislar el proceso en un Job Object de Windows: {err}"
+                ),
         ));
     }
     Ok(child)
@@ -207,7 +211,7 @@ fn resume_main_thread(child: &Child) -> io::Result<()> {
 
         let pid = child
             .id()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "o processo já foi encerrado"))?;
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, tr!("o processo já foi encerrado", "the process has already ended", "el proceso ya terminó")))?;
         let snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
         if snap == INVALID_HANDLE_VALUE || snap.is_null() {
             return Err(io::Error::last_os_error());
@@ -234,7 +238,11 @@ fn resume_main_thread(child: &Child) -> io::Result<()> {
         if resumed == 0 {
             return Err(io::Error::new(
                 io::ErrorKind::Other,
+                tr!(
                 "não foi possível retomar a thread principal do processo",
+                "couldn't resume the main thread of the process",
+                "no se pudo reanudar el hilo principal del proceso"
+            ),
             ));
         }
         Ok(())
@@ -326,9 +334,11 @@ pub fn list_running_exe_names() -> Vec<String> {
 pub fn ensure_webview2_installed() -> bool {
     #[cfg(windows)]
     {
+        // Per-machine (64- and 32-bit views) and per-user installs, as Microsoft documents them.
         let candidates = [
-            r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
-            r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+            r"HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+            r"HKLM\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+            r"HKCU\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
         ];
         // Check via reg.exe or known Edge/WebView2 directories without extra crate bloat
         for base in [
@@ -347,18 +357,15 @@ pub fn ensure_webview2_installed() -> bool {
                 return true;
             }
         }
-        // Fallback: check registry via hidden reg query
-        let mut cmd = std::process::Command::new("reg.exe");
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(CREATE_NO_WINDOW_FLAG);
-        }
+        // Fallback: check the registry with a hidden `reg query`, one fresh command per key
+        // (reusing a `Command` would pile up the arguments of every previous query).
         for key in candidates {
-            if let Ok(out) = cmd
-                .args(["query", &format!("HKLM\\{key}"), "/v", "pv"])
-                .output()
+            let mut cmd = std::process::Command::new("reg.exe");
             {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(CREATE_NO_WINDOW_FLAG);
+            }
+            if let Ok(out) = cmd.args(["query", key, "/v", "pv"]).output() {
                 if out.status.success() {
                     return true;
                 }
@@ -379,15 +386,18 @@ pub fn show_missing_webview2_dialog() {
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             MessageBoxW, MB_ICONWARNING, MB_OK,
         };
-        let title: Vec<u16> = "Boladão — WebView2 necessário\0".encode_utf16().collect();
-        let body: Vec<u16> = concat!(
-            "O Microsoft Edge WebView2 não foi encontrado neste Windows.\n\n",
-            "Baixe e instale o Runtime Evergreen oficial da Microsoft em:\n",
-            "https://go.microsoft.com/fwlink/p/?LinkId=2124703\n\n",
-            "Depois de instalar, abra o Boladão novamente.\0"
-        )
-        .encode_utf16()
-        .collect();
+        let title = tr!(
+            "Boladão — WebView2 necessário",
+            "Boladão — WebView2 required",
+            "Boladão — se necesita WebView2"
+        );
+        let body = tr!(
+            "O Microsoft Edge WebView2 não foi encontrado neste Windows.\n\nBaixe e instale o Runtime Evergreen oficial da Microsoft em:\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703\n\nDepois de instalar, abra o Boladão novamente.",
+            "Microsoft Edge WebView2 was not found on this Windows.\n\nDownload and install the official Evergreen Runtime from Microsoft at:\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703\n\nAfter installing it, open Boladão again.",
+            "No se encontró Microsoft Edge WebView2 en este Windows.\n\nDescarga e instala el Runtime Evergreen oficial de Microsoft en:\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703\n\nDespués de instalarlo, vuelve a abrir Boladão."
+        );
+        let title: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+        let body: Vec<u16> = body.encode_utf16().chain(std::iter::once(0)).collect();
         MessageBoxW(std::ptr::null_mut(), body.as_ptr(), title.as_ptr(), MB_OK | MB_ICONWARNING);
     }
 }

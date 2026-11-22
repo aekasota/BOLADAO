@@ -1,5 +1,6 @@
 use crate::cookies::ConnectedAccount;
 use crate::gamemode::GameModeOverride;
+use crate::i18n::LanguageSetting;
 use crate::limiter::BandwidthProfile;
 use crate::paths::{
     app_config_dir, default_music_root, default_video_root, detect_legacy_yt2_music_folder,
@@ -65,6 +66,8 @@ pub struct AppSettings {
     pub custom_limit_bps: u64,
     pub light_limit_bps: u64,
     pub peak_7d_bps: u64,
+    /// Highest speed of each day (`YYYY-MM-DD`), kept for 7 days to compute `peak_7d_bps`.
+    pub daily_peaks: BTreeMap<String, u64>,
     pub speed_unit: SpeedUnit,
     pub tray_notice_shown: bool,
 
@@ -86,6 +89,8 @@ pub struct AppSettings {
 
     // Appearance
     pub theme: ThemeId,
+    /// Interface language: follows Windows by default.
+    pub language: LanguageSetting,
     #[serde(default = "default_shader_intensity")]
     pub shader_intensity: f32,
     pub shader_outside_intensity: f32,
@@ -132,6 +137,7 @@ impl Default for AppSettings {
             custom_limit_bps: 5 * 1024 * 1024,
             light_limit_bps: 2 * 1024 * 1024,
             peak_7d_bps: 0,
+            daily_peaks: BTreeMap::new(),
             speed_unit: SpeedUnit::BytesPerSec,
             tray_notice_shown: false,
 
@@ -154,6 +160,7 @@ impl Default for AppSettings {
             last_spec_by_platform: BTreeMap::new(),
 
             theme: ThemeId::Sangue,
+            language: LanguageSetting::Auto,
             shader_intensity: 1.0,
             shader_outside_intensity: 1.0,
             shader_stripe_density: 1.0,
@@ -187,12 +194,38 @@ pub fn load_or_init_settings() -> AppSettings {
     }
 
     let mut fresh = AppSettings::default();
+    localize_default_templates(&mut fresh, crate::i18n::current());
     if let Some((legacy_music, _src_cfg)) = detect_legacy_yt2_music_folder() {
         fresh.music_root = legacy_music.clone();
         fresh.migrated_from_yt2 = Some(legacy_music);
     }
     let _ = save_settings_to_disk(&fresh);
     fresh
+}
+
+/// On a fresh install, the default templates use the tokens of the interface language. Templates
+/// in any language keep working (see `paths::canonical_template`).
+fn localize_default_templates(cfg: &mut AppSettings, lang: crate::i18n::Lang) {
+    use crate::i18n::Lang;
+    let (audio, video, playlist_audio, playlist_video) = match lang {
+        Lang::Pt => return,
+        Lang::En => (
+            "{artist}\\{album}\\{track}",
+            "{platform}\\{channel}\\{title} [{id}]",
+            "{artist}\\{playlist}\\{nn} - {track}",
+            "{platform}\\{channel}\\{playlist}\\{nn} - {title}",
+        ),
+        Lang::Es => (
+            "{artista}\\{album}\\{pista}",
+            "{plataforma}\\{canal}\\{titulo} [{id}]",
+            "{artista}\\{playlist}\\{nn} - {pista}",
+            "{plataforma}\\{canal}\\{playlist}\\{nn} - {titulo}",
+        ),
+    };
+    cfg.audio_template = audio.to_string();
+    cfg.video_template = video.to_string();
+    cfg.playlist_audio_template = playlist_audio.to_string();
+    cfg.playlist_video_template = playlist_video.to_string();
 }
 
 pub fn save_settings_to_disk(settings: &AppSettings) -> Result<(), String> {
@@ -204,8 +237,12 @@ pub fn save_settings_to_disk(settings: &AppSettings) -> Result<(), String> {
 fn write_settings_file(path: &Path, settings: &AppSettings) -> Result<(), String> {
     let tmp = path.with_extension("json.tmp");
     let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-    fs::write(&tmp, json).map_err(|e| format!("Erro salvando settings.json: {e}"))?;
-    fs::rename(&tmp, path).map_err(|e| format!("Erro confirmando settings.json: {e}"))
+    fs::write(&tmp, json).map_err(|e| {
+        tr!("Erro salvando settings.json: {e}", "Error saving settings.json: {e}", "Error al guardar settings.json: {e}")
+    })?;
+    fs::rename(&tmp, path).map_err(|e| {
+        tr!("Erro confirmando settings.json: {e}", "Error confirming settings.json: {e}", "Error al confirmar settings.json: {e}")
+    })
 }
 
 #[cfg(test)]

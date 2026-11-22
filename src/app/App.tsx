@@ -7,7 +7,6 @@ import {
   HardDrive,
   Maximize2,
   Minus,
-  RefreshCw,
   Square,
   X,
 } from "lucide-react";
@@ -34,6 +33,8 @@ import {
   logSliderToBps,
 } from "../lib/format";
 import { OpArtCanvas } from "../shader/OpArtCanvas";
+import { UpdateChip } from "./UpdateNotice";
+import { HTML_LANG, loadSystemLanguage, useLang, useT } from "../i18n";
 import { AppTab, useAppStore } from "../stores/appStore";
 import { useLimiterStore } from "../stores/limiterStore";
 import { useQueueStore } from "../stores/queueStore";
@@ -44,7 +45,6 @@ import { LibraryTab } from "../features/library/LibraryTab";
 import { SettingsTab } from "../features/settings/SettingsTab";
 import { InstallerView } from "../features/installer/InstallerView";
 import {
-  Button,
   Chip,
   Popover,
   Slider,
@@ -55,6 +55,13 @@ import {
 
 export const App: React.FC = () => {
   const [launchMode] = useState<LaunchMode>(() => readInitialLaunchMode());
+  const lang = useLang();
+  useEffect(() => {
+    loadSystemLanguage();
+  }, []);
+  useEffect(() => {
+    document.documentElement.lang = HTML_LANG[lang];
+  }, [lang]);
   if (launchMode.mode !== "app") {
     return (
       <Tooltip.Provider delayDuration={250}>
@@ -66,6 +73,7 @@ export const App: React.FC = () => {
 };
 
 const MainApp: React.FC = () => {
+  const t = useT();
   const urlInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeTab = useAppStore((s) => s.activeTab);
@@ -98,6 +106,8 @@ const MainApp: React.FC = () => {
   const [updateBannerVer, setUpdateBannerVer] = useState<string | null>(null);
   const [appUpdate, setAppUpdate] = useState<AppUpdateInfo | null>(null);
   const [applyingUpdate, setApplyingUpdate] = useState(false);
+  const [updatingYtdlp, setUpdatingYtdlp] = useState(false);
+  const [ytdlpUpdateError, setYtdlpUpdateError] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
 
   // Shrink stage to the top Notch crown strip whenever user switches away from Download tab (Section 13.5)
@@ -356,19 +366,19 @@ const MainApp: React.FC = () => {
 
   const limiterChipLabel = useMemo(() => {
     if (gameMode.active) {
-      return `Modo jogo · ${formatSpeedPrimary(limiterStats.limit_bps, settings.speed_unit)}`;
+      return t.app.limiter.gameMode(formatSpeedPrimary(limiterStats.limit_bps, settings.speed_unit));
     }
     switch (limiterStats.profile) {
       case "unlimited":
-        return "Banda · ∞";
+        return t.app.limiter.unlimited;
       case "balanced":
-        return `Equilibrado · ${formatSpeedPrimary(limiterStats.limit_bps, settings.speed_unit)}`;
+        return t.app.limiter.balanced(formatSpeedPrimary(limiterStats.limit_bps, settings.speed_unit));
       case "light":
-        return `Leve · ${formatSpeedPrimary(limiterStats.limit_bps, settings.speed_unit)}`;
+        return t.app.limiter.light(formatSpeedPrimary(limiterStats.limit_bps, settings.speed_unit));
       case "custom":
         return formatSpeedPrimary(limiterStats.limit_bps, settings.speed_unit);
     }
-  }, [gameMode.active, limiterStats, settings.speed_unit]);
+  }, [gameMode.active, limiterStats, settings.speed_unit, t]);
 
   const winMinimize = () => isTauriRuntime() && getCurrentWindow().minimize();
   const winToggleMax = async () => {
@@ -378,6 +388,29 @@ const MainApp: React.FC = () => {
     setMaximized(await w.isMaximized());
   };
   const winClose = () => isTauriRuntime() && getCurrentWindow().close();
+
+  const applyAppUpdate = async () => {
+    setApplyingUpdate(true);
+    try {
+      await api.applyUpdateNow();
+    } catch {
+      setApplyingUpdate(false);
+    }
+  };
+
+  const applyYtdlpUpdate = async () => {
+    setUpdatingYtdlp(true);
+    setYtdlpUpdateError(null);
+    try {
+      await api.updateYtdlp();
+      setUpdateBannerVer(null);
+      setBinsStatus(await api.getBinsStatus());
+    } catch (e) {
+      setYtdlpUpdateError(String(e));
+    } finally {
+      setUpdatingYtdlp(false);
+    }
+  };
 
   return (
     <Tooltip.Provider delayDuration={250}>
@@ -430,7 +463,7 @@ const MainApp: React.FC = () => {
           <motion.nav
             layout
             transition={settings.reduce_motion ? { duration: 0 } : SPRING_UI}
-            aria-label="Navegação principal"
+            aria-label={t.app.mainNav}
             className="notch-dock"
           >
             {/* Left Concave Shoulder Fillet */}
@@ -450,10 +483,10 @@ const MainApp: React.FC = () => {
 
             {(
               [
-                { id: "download", label: "Baixar" },
-                { id: "queue", label: "Fila", badge: queueCounts.badge },
-                { id: "library", label: "Biblioteca" },
-                { id: "settings", label: "Ajustes" },
+                { id: "download", label: t.app.tabs.download },
+                { id: "queue", label: t.app.tabs.queue, badge: queueCounts.badge },
+                { id: "library", label: t.app.tabs.library },
+                { id: "settings", label: t.app.tabs.settings },
               ] as { id: AppTab; label: string; badge?: number }[]
             ).map((t) => {
               const selected = activeTab === t.id;
@@ -530,7 +563,7 @@ const MainApp: React.FC = () => {
             <button
               type="button"
               onClick={winMinimize}
-              aria-label="Minimizar"
+              aria-label={t.app.window.minimize}
               className="win-ctrl-btn"
             >
               <Minus size={13} />
@@ -538,7 +571,7 @@ const MainApp: React.FC = () => {
             <button
               type="button"
               onClick={winToggleMax}
-              aria-label="Maximizar"
+              aria-label={t.app.window.maximize}
               className="win-ctrl-btn"
             >
               {maximized ? <Square size={11} /> : <Maximize2 size={12} />}
@@ -546,7 +579,7 @@ const MainApp: React.FC = () => {
             <button
               type="button"
               onClick={winClose}
-              aria-label="Fechar"
+              aria-label={t.app.window.close}
               className="win-ctrl-btn win-ctrl-close"
             >
               <X size={14} />
@@ -554,78 +587,6 @@ const MainApp: React.FC = () => {
           </div>
         </header>
 
-        {/* Weekly silent yt-dlp update banner (Section 14.6 microcopy) */}
-        {updateBannerVer && (
-          <div
-            style={{
-              zIndex: 15,
-              background: "var(--surface-2)",
-              borderBottom: "1px solid var(--line)",
-              padding: "6px 24px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 12,
-              fontSize: 12.5,
-            }}
-          >
-            <span>Tem yt-dlp novo ({updateBannerVer}). Atualizar?</span>
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={async () => {
-                await api.updateYtdlp();
-                setUpdateBannerVer(null);
-                setBinsStatus(await api.getBinsStatus());
-              }}
-            >
-              <RefreshCw size={12} /> Atualizar agora
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setUpdateBannerVer(null)}>
-              Depois
-            </Button>
-          </div>
-        )}
-
-        {/* Boladão update downloaded and verified: installs now or on the next start */}
-        {appUpdate && (
-          <div
-            style={{
-              zIndex: 15,
-              background: "var(--surface-2)",
-              borderBottom: "1px solid var(--line)",
-              padding: "6px 24px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 12,
-              fontSize: 12.5,
-            }}
-          >
-            <span>
-              Boladão {appUpdate.version} está pronto e entra sozinho na próxima abertura. Downloads em
-              andamento continuam de onde pararam.
-            </span>
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={applyingUpdate}
-              onClick={async () => {
-                setApplyingUpdate(true);
-                try {
-                  await api.applyUpdateNow();
-                } catch {
-                  setApplyingUpdate(false);
-                }
-              }}
-            >
-              <RefreshCw size={12} /> Reiniciar agora
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setAppUpdate(null)}>
-              Depois
-            </Button>
-          </div>
-        )}
 
         {/* Discreet 6-second Clipboard Pill when window regains focus (Section 6) */}
         <AnimatePresence>
@@ -670,7 +631,7 @@ const MainApp: React.FC = () => {
                     cursor: "pointer",
                   }}
                 >
-                  Colar link do {clipboardSuggestion.platformName}?
+                  {t.app.clipboardPaste(clipboardSuggestion.platformName)}
                 </button>
                 <button
                   type="button"
@@ -716,12 +677,9 @@ const MainApp: React.FC = () => {
                 }}
               >
                 <div className="font-display" style={{ fontSize: 22 }}>
-                  Preparando os motores
+                  {t.app.enginesTitle}
                 </div>
-                <div style={{ fontSize: 13, color: "var(--text-2)" }}>
-                  Primeira abertura: descomprimindo yt-dlp, Deno e FFmpeg no seu PC. Nas próximas
-                  vezes abre na hora.
-                </div>
+                <div style={{ fontSize: 13, color: "var(--text-2)" }}>{t.app.enginesBody}</div>
                 <StripeProgress
                   pct={binsStatus.progress_pct}
                   state="downloading"
@@ -784,12 +742,41 @@ const MainApp: React.FC = () => {
 
           {/* Center: Active & Queued Summary */}
           <div className="font-mono-num" style={{ color: "var(--text-2)" }}>
-            {queueCounts.active} {queueCounts.active === 1 ? "ativo" : "ativos"} ·{" "}
-            {queueCounts.queued} na fila
+            {t.app.activeCount(queueCounts.active)} · {t.app.queuedCount(queueCounts.queued)}
           </div>
 
           {/* Right: Bandwidth / Game Mode Popover + Free Disk Space */}
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {/* Updates ready: Boladão (downloaded and verified) and the yt-dlp engine */}
+            {appUpdate && (
+              <UpdateChip
+                label={t.update.appChip(appUpdate.version)}
+                ariaLabel={t.update.appAria(appUpdate.version)}
+                title={t.update.appTitle(appUpdate.version)}
+                body={t.update.appBody}
+                actionLabel={t.update.restartNow}
+                busyLabel={t.update.restarting}
+                laterLabel={t.common.later}
+                busy={applyingUpdate}
+                autoOpen
+                onAction={applyAppUpdate}
+              />
+            )}
+            {updateBannerVer && (
+              <UpdateChip
+                label={`yt-dlp ${updateBannerVer}`}
+                ariaLabel={t.update.ytdlpAria(updateBannerVer)}
+                title={t.update.ytdlpTitle}
+                body={t.update.ytdlpBody(updateBannerVer)}
+                actionLabel={t.update.updateNow}
+                busyLabel={t.update.updating}
+                laterLabel={t.common.later}
+                busy={updatingYtdlp}
+                error={ytdlpUpdateError}
+                autoOpen={!appUpdate}
+                onAction={applyYtdlpUpdate}
+              />
+            )}
             <Popover.Root>
               <Popover.Trigger asChild>
                 <button
@@ -824,14 +811,14 @@ const MainApp: React.FC = () => {
                   className="op-panel"
                   style={{ padding: 14, width: 310, zIndex: 70, display: "flex", flexDirection: "column", gap: 10 }}
                 >
-                  <div style={{ fontSize: 12.5, fontWeight: 700 }}>Limite de banda ao vivo</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700 }}>{t.app.limiter.popoverTitle}</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {(
                       [
-                        ["unlimited", "Sem limite"],
-                        ["balanced", "Equilibrado"],
-                        ["light", "Leve"],
-                        ["custom", "Personalizado"],
+                        ["unlimited", t.app.profiles.unlimited],
+                        ["balanced", t.app.profiles.balanced],
+                        ["light", t.app.profiles.light],
+                        ["custom", t.app.profiles.custom],
                       ] as [BandwidthProfile, string][]
                     ).map(([prof, lbl]) => (
                       <Chip
@@ -876,9 +863,9 @@ const MainApp: React.FC = () => {
                   alignItems: "center",
                   gap: 4,
                 }}
-                title="Espaço livre no disco de destino"
+                title={t.app.freeDiskTitle}
               >
-                <HardDrive size={12} /> {formatBytes(freeDiskBytes)} livres
+                <HardDrive size={12} /> {t.app.freeDisk(formatBytes(freeDiskBytes))}
               </span>
             )}
 
@@ -894,7 +881,7 @@ const MainApp: React.FC = () => {
             <span
               role="link"
               tabIndex={0}
-              aria-label="Abrir o GitHub de @aekasota"
+              aria-label={t.app.authorLink}
               onClick={() => api.openAuthorProfile()}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {

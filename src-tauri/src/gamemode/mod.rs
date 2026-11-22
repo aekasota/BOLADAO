@@ -102,7 +102,7 @@ fn detect_active_game_or_fullscreen(configured_exes: &[String]) -> Option<String
                 continue;
             }
             if let Some(found) = running.iter().find(|r| r.to_ascii_lowercase() == target) {
-                return Some(format!("Jogo em execução ({found})"));
+                return Some(tr!("Jogo em execução ({found})", "Game running ({found})", "Juego en ejecución ({found})"));
             }
         }
     }
@@ -125,7 +125,7 @@ fn detect_active_game_or_fullscreen(configured_exes: &[String]) -> Option<String
         // 2. Direct3D exclusive fullscreen via SHQueryUserNotificationState
         let mut quns: i32 = 0;
         if SHQueryUserNotificationState(&mut quns) == 0 && quns == QUNS_RUNNING_D3D_FULL_SCREEN {
-            return Some("Jogo Direct3D em tela cheia".to_string());
+            return Some(tr!("Jogo Direct3D em tela cheia", "Full-screen Direct3D game", "Juego Direct3D en pantalla completa"));
         }
 
         // 3. Borderless fullscreen foreground window (excluding our own PID & Windows desktop shell)
@@ -162,7 +162,7 @@ fn detect_active_game_or_fullscreen(configured_exes: &[String]) -> Option<String
                                     && win_rect.right >= m.right
                                     && win_rect.bottom >= m.bottom
                                 {
-                                    return Some("Aplicativo em tela cheia".to_string());
+                                    return Some(tr!("Aplicativo em tela cheia", "Full-screen app", "Aplicación en pantalla completa"));
                                 }
                             }
                         }

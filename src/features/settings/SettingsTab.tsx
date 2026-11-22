@@ -19,6 +19,7 @@ import {
   BandwidthProfile,
   CollisionPolicy,
   GameModeOverride,
+  LanguageSetting,
   safeListen,
   SpeedUnit,
   ThemeId,
@@ -40,21 +41,7 @@ import {
   Slider,
   Toggle,
 } from "../../ui/Primitives";
-
-const TEMPLATE_TOKENS = [
-  { token: "{tipo}", label: "Tipo" },
-  { token: "{plataforma}", label: "Plataforma" },
-  { token: "{canal}", label: "Canal" },
-  { token: "{artista}", label: "Artista" },
-  { token: "{playlist}", label: "Playlist" },
-  { token: "{album}", label: "Álbum" },
-  { token: "{nn}", label: "NN" },
-  { token: "{titulo}", label: "Título" },
-  { token: "{faixa}", label: "Faixa" },
-  { token: "{id}", label: "ID" },
-  { token: "{ano}", label: "Ano" },
-  { token: "{mes}", label: "Mês" },
-];
+import { formatDate, formatDecimal, LANGUAGE_NAMES, useSystemLanguage, useT } from "../../i18n";
 
 const ACCOUNT_PLATFORMS = [
   { id: "youtube", name: "YouTube / YouTube Music", slug: "youtube", color: "#FF0033" },
@@ -67,6 +54,8 @@ const ACCOUNT_PLATFORMS = [
 ];
 
 export const SettingsTab: React.FC = () => {
+  const t = useT();
+  const systemLanguage = useSystemLanguage((s) => s.language);
   const settings = useSettingsStore((s) => s.settings);
   const presets = useSettingsStore((s) => s.presets);
   const updateSettings = useSettingsStore((s) => s.updateSettings);
@@ -114,7 +103,7 @@ export const SettingsTab: React.FC = () => {
   useEffect(() => {
     api
       .previewPath(settings.music_root, settings.audio_template, {
-        media_type: "Música",
+        media_type: t.settings.previewSample.music,
         platform: "YouTube Music",
         creator: "Jorge Ben Jor",
         playlist: "A Tábua de Esmeralda",
@@ -130,12 +119,12 @@ export const SettingsTab: React.FC = () => {
 
     api
       .previewPath(settings.video_root, settings.video_template, {
-        media_type: "Vídeos",
+        media_type: t.settings.previewSample.videos,
         platform: "YouTube",
-        creator: "Canal Exemplo",
-        playlist: "Favoritos",
+        creator: t.settings.previewSample.channel,
+        playlist: t.settings.previewSample.playlist,
         index: 3,
-        title: "Documentário Completo",
+        title: t.settings.previewSample.title,
         track: null,
         id: "dQw4w9WgXcQ",
         year: "2026",
@@ -148,6 +137,7 @@ export const SettingsTab: React.FC = () => {
     settings.video_root,
     settings.audio_template,
     settings.video_template,
+    t,
   ]);
 
   useEffect(() => {
@@ -160,14 +150,14 @@ export const SettingsTab: React.FC = () => {
   }, [activeSection]);
 
   const navItems = [
-    { id: "folders", label: "Pastas e organização", icon: FolderOpen },
-    { id: "network", label: "Rede e banda", icon: Gauge },
-    { id: "gamemode", label: "Modo jogo", icon: Gamepad2 },
-    { id: "accounts", label: "Contas", icon: KeyRound },
-    { id: "presets", label: "Padrões e presets", icon: Sliders },
-    { id: "appearance", label: "Aparência", icon: Palette },
-    { id: "components", label: "Componentes", icon: Cpu },
-    { id: "advanced", label: "Avançado", icon: Terminal },
+    { id: "folders", label: t.settings.nav.folders, icon: FolderOpen },
+    { id: "network", label: t.settings.nav.network, icon: Gauge },
+    { id: "gamemode", label: t.settings.nav.gamemode, icon: Gamepad2 },
+    { id: "accounts", label: t.settings.nav.accounts, icon: KeyRound },
+    { id: "presets", label: t.settings.nav.presets, icon: Sliders },
+    { id: "appearance", label: t.settings.nav.appearance, icon: Palette },
+    { id: "components", label: t.settings.nav.components, icon: Cpu },
+    { id: "advanced", label: t.settings.nav.advanced, icon: Terminal },
   ];
 
   const pickRootFolder = async (key: "music_root" | "video_root") => {
@@ -253,11 +243,11 @@ export const SettingsTab: React.FC = () => {
           {activeSection === "folders" && (
             <>
               <h2 className="font-display" style={{ margin: 0, fontSize: 18 }}>
-                Pastas e organização
+                {t.settings.nav.folders}
               </h2>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Raiz de Música</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{t.settings.folders.musicRoot}</span>
                 <PathPreview
                   path={settings.music_root}
                   onClick={() => pickRootFolder("music_root")}
@@ -265,7 +255,7 @@ export const SettingsTab: React.FC = () => {
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Raiz de Vídeos</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{t.settings.folders.videoRoot}</span>
                 <PathPreview
                   path={settings.video_root}
                   onClick={() => pickRootFolder("video_root")}
@@ -274,10 +264,10 @@ export const SettingsTab: React.FC = () => {
 
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>
-                  Chips de template (clique para inserir no template de vídeo ou áudio)
+                  {t.settings.folders.chips}
                 </span>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {TEMPLATE_TOKENS.map((tk) => (
+                  {t.settings.templateTokens.map((tk) => (
                     <Chip
                       key={tk.token}
                       onClick={() =>
@@ -285,7 +275,7 @@ export const SettingsTab: React.FC = () => {
                           video_template: `${settings.video_template}\\${tk.token}`,
                         })
                       }
-                      title={`Inserir ${tk.token}`}
+                      title={t.settings.folders.insertToken(tk.token)}
                     >
                       [{tk.label}]
                     </Chip>
@@ -294,7 +284,7 @@ export const SettingsTab: React.FC = () => {
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label style={{ fontSize: 13, fontWeight: 600 }}>Template de Áudio</label>
+                <label style={{ fontSize: 13, fontWeight: 600 }}>{t.settings.folders.audioTemplate}</label>
                 <input
                   className="op-input font-mono-num"
                   value={settings.audio_template}
@@ -302,12 +292,12 @@ export const SettingsTab: React.FC = () => {
                   style={{ height: 36, padding: "0 12px", fontSize: 13 }}
                 />
                 <span className="font-mono-num" style={{ fontSize: 11.5, color: "var(--text-2)" }}>
-                  Prévia: {audioPreview}
+                  {t.settings.folders.preview(audioPreview)}
                 </span>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label style={{ fontSize: 13, fontWeight: 600 }}>Template de Vídeo</label>
+                <label style={{ fontSize: 13, fontWeight: 600 }}>{t.settings.folders.videoTemplate}</label>
                 <input
                   className="op-input font-mono-num"
                   value={settings.video_template}
@@ -315,20 +305,20 @@ export const SettingsTab: React.FC = () => {
                   style={{ height: 36, padding: "0 12px", fontSize: 13 }}
                 />
                 <span className="font-mono-num" style={{ fontSize: 11.5, color: "var(--text-2)" }}>
-                  Prévia: {videoPreview}
+                  {t.settings.folders.preview(videoPreview)}
                 </span>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Se o arquivo já existir</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{t.settings.folders.collision}</span>
                 <Segmented<CollisionPolicy>
                   id="collision-policy"
                   value={settings.collision_policy}
                   onChange={(v) => updateSettings({ collision_policy: v })}
                   options={[
-                    { value: "keep_both", label: "Manter os dois (2)" },
-                    { value: "overwrite", label: "Substituir" },
-                    { value: "skip", label: "Pular" },
+                    { value: "keep_both", label: t.settings.folders.keepBoth },
+                    { value: "overwrite", label: t.settings.folders.overwrite },
+                    { value: "skip", label: t.settings.folders.skip },
                   ]}
                 />
               </div>
@@ -339,18 +329,18 @@ export const SettingsTab: React.FC = () => {
           {activeSection === "network" && (
             <>
               <h2 className="font-display" style={{ margin: 0, fontSize: 18 }}>
-                Rede e banda
+                {t.settings.nav.network}
               </h2>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Perfil de velocidade global</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{t.settings.network.profile}</span>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {(
                     [
-                      ["unlimited", "Sem limite (∞)"],
-                      ["balanced", "Equilibrado (60% do pico)"],
-                      ["light", "Leve (2 MB/s)"],
-                      ["custom", "Personalizado"],
+                      ["unlimited", t.settings.network.unlimited],
+                      ["balanced", t.settings.network.balanced],
+                      ["light", t.settings.network.light],
+                      ["custom", t.settings.network.custom],
                     ] as [BandwidthProfile, string][]
                   ).map(([prof, lbl]) => (
                     <Chip
@@ -369,7 +359,7 @@ export const SettingsTab: React.FC = () => {
 
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                  <span>Limite personalizado (escala logarítmica):</span>
+                  <span>{t.settings.network.customLimit}</span>
                   <strong className="font-mono-num">
                     {formatDualBandwidth(settings.custom_limit_bps, settings.speed_unit)}
                   </strong>
@@ -389,18 +379,18 @@ export const SettingsTab: React.FC = () => {
                   }}
                 />
                 <div className="font-mono-num" style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-                  Pico medido (7 dias):{" "}
+                  {t.settings.network.peak}{" "}
                   {limiterStats.peak_7d_bps > 0
                     ? formatDualBandwidth(limiterStats.peak_7d_bps, settings.speed_unit)
-                    : "ainda não medido"}
+                    : t.settings.network.notMeasured}
                   {limiterStats.proxy_port
-                    ? ` · Proxy local ativo (127.0.0.1:${limiterStats.proxy_port}, SO_RCVBUF 256 KB)`
-                    : " · Modo compatível"}
+                    ? t.settings.network.proxyActive(limiterStats.proxy_port)
+                    : t.settings.network.compatMode}
                 </div>
               </div>
 
               <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-                <span style={{ fontSize: 13 }}>Unidade principal:</span>
+                <span style={{ fontSize: 13 }}>{t.settings.network.unit}</span>
                 <Segmented<SpeedUnit>
                   id="speed-unit"
                   value={settings.speed_unit}
@@ -414,7 +404,7 @@ export const SettingsTab: React.FC = () => {
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
                 <div>
-                  <label style={{ fontSize: 12, color: "var(--text-2)" }}>Global (1–6)</label>
+                  <label style={{ fontSize: 12, color: "var(--text-2)" }}>{t.settings.network.global}</label>
                   <input
                     type="number"
                     min={1}
@@ -432,7 +422,7 @@ export const SettingsTab: React.FC = () => {
                 {["youtube", "instagram", "tiktok"].map((host) => (
                   <div key={host}>
                     <label style={{ fontSize: 12, color: "var(--text-2)" }}>
-                      Por host ({host})
+                      {t.settings.network.perHost(host)}
                     </label>
                     <input
                       type="number"
@@ -460,17 +450,16 @@ export const SettingsTab: React.FC = () => {
           {activeSection === "gamemode" && (
             <>
               <h2 className="font-display" style={{ margin: 0, fontSize: 18 }}>
-                Modo jogo
+                {t.settings.nav.gamemode}
               </h2>
               <p style={{ margin: 0, fontSize: 13, color: "var(--text-2)" }}>
-                Detecta jogos Direct3D, aplicativos em tela cheia ou executáveis da lista abaixo.
-                Quando ativo: reduz a banda, baixa concorrência para 1, coloca encodes da Oficina em{" "}
-                <code className="font-mono-num">IDLE_PRIORITY_CLASS</code> e congela o shader do
-                fundo (0% GPU).
+                {t.settings.gamemode.introBefore}{" "}
+                <code className="font-mono-num">IDLE_PRIORITY_CLASS</code>{" "}
+                {t.settings.gamemode.introAfter}
               </p>
 
               <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>Controle:</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{t.settings.gamemode.control}</span>
                 <Segmented<GameModeOverride>
                   id="gm-override"
                   value={settings.game_mode_override}
@@ -480,14 +469,14 @@ export const SettingsTab: React.FC = () => {
                     await updateSettings({ game_mode_override: ovr });
                   }}
                   options={[
-                    { value: "auto", label: "Automático" },
-                    { value: "force_on", label: "Forçar ligado" },
-                    { value: "force_off", label: "Forçar desligado" },
+                    { value: "auto", label: t.settings.gamemode.auto },
+                    { value: "force_on", label: t.settings.gamemode.forceOn },
+                    { value: "force_off", label: t.settings.gamemode.forceOff },
                   ]}
                 />
                 {gameMode.active && (
                   <span style={{ fontSize: 12, color: "var(--accent-text)", fontWeight: 700 }}>
-                    ● Ativo agora ({gameMode.reason || "Modo jogo"})
+                    {t.settings.gamemode.activeNow(gameMode.reason || t.settings.gamemode.fallbackReason)}
                   </span>
                 )}
               </div>
@@ -495,12 +484,12 @@ export const SettingsTab: React.FC = () => {
               <Toggle
                 checked={settings.game_mode_auto}
                 onChange={(v) => updateSettings({ game_mode_auto: v })}
-                label="Ativar automaticamente ao abrir jogo ou aplicativo em tela cheia"
+                label={t.settings.gamemode.autoToggle}
               />
 
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>
-                  Executáveis que ativam o Modo jogo
+                  {t.settings.gamemode.exeList}
                 </span>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {settings.game_exe_list.map((exe) => (
@@ -511,7 +500,7 @@ export const SettingsTab: React.FC = () => {
                           game_exe_list: settings.game_exe_list.filter((x) => x !== exe),
                         })
                       }
-                      title="Clique para remover"
+                      title={t.settings.gamemode.clickToRemove}
                     >
                       {exe} ×
                     </Chip>
@@ -520,7 +509,7 @@ export const SettingsTab: React.FC = () => {
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
                     className="op-input font-mono-num"
-                    placeholder="Ex.: cyberpunk2077.exe"
+                    placeholder={t.settings.gamemode.exePlaceholder}
                     value={newGameExe}
                     onChange={(e) => setNewGameExe(e.target.value)}
                     style={{ height: 34, padding: "0 10px", flex: 1 }}
@@ -537,14 +526,14 @@ export const SettingsTab: React.FC = () => {
                       }
                     }}
                   >
-                    Adicionar
+                    {t.settings.gamemode.add}
                   </Button>
                 </div>
 
                 {runningProcs.length > 0 && (
                   <div style={{ marginTop: 4 }}>
                     <div style={{ fontSize: 11.5, color: "var(--text-3)", marginBottom: 6 }}>
-                      Em execução agora (clique para adicionar):
+                      {t.settings.gamemode.runningNow}
                     </div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", maxHeight: 90, overflowY: "auto" }}>
                       {runningProcs
@@ -578,7 +567,7 @@ export const SettingsTab: React.FC = () => {
           {activeSection === "accounts" && (
             <>
               <h2 className="font-display" style={{ margin: 0, fontSize: 18 }}>
-                Contas e cookies
+                {t.settings.accounts.title}
               </h2>
 
               <div
@@ -595,17 +584,14 @@ export const SettingsTab: React.FC = () => {
               >
                 <AlertTriangle size={16} color="var(--warn)" style={{ marginTop: 2, flexShrink: 0 }} />
                 <div>
-                  <strong style={{ color: "var(--warn)" }}>Aviso sobre YouTube:</strong> Usar conta
-                  logada com o yt-dlp pode levar a restrições na conta. Use só quando precisar
-                  (restrição de idade, membros), de preferência com uma conta secundária. Chrome e
-                  Edge (v127+) usam criptografia app-bound no Windows, então para YouTube prefira{" "}
-                  <strong>Firefox</strong> ou importar um <code className="font-mono-num">cookies.txt</code>.
+                  <strong style={{ color: "var(--warn)" }}>{t.settings.accounts.youtubeWarnTitle}</strong>{" "}
+                  {t.settings.accounts.youtubeWarnBody} <strong>Firefox</strong>{" "}
+                  {t.settings.accounts.youtubeWarnOr} <code className="font-mono-num">cookies.txt</code>.
                 </div>
               </div>
 
               <div style={{ fontSize: 12.5, color: "var(--text-2)" }}>
-                Cookies funcionam como senha. O Boladão guarda os seus criptografados pelo Windows (DPAPI),
-                presos à sua conta de usuário, e só os decifra num arquivo temporário enquanto o yt-dlp roda.
+                {t.settings.accounts.cookiesNote}
               </div>
 
               {accountMsg && (
@@ -637,20 +623,17 @@ export const SettingsTab: React.FC = () => {
                           <div style={{ fontWeight: 700, fontSize: 13.5 }}>{plat.name}</div>
                           <div style={{ fontSize: 11.5, color: "var(--text-2)" }}>
                             {acc
-                              ? `Conectado (${
+                              ? t.settings.accounts.connected(
                                   acc.auth_kind === "firefox_browser"
                                     ? "Firefox"
                                     : acc.auth_kind === "imported_cookies_file"
-                                    ? `cookies.txt · ${acc.cookie_count} cookies`
-                                    : `${acc.cookie_count} cookies`
-                                })${
-                                  acc.earliest_expiry_ts
-                                    ? ` · expira ${new Date(
-                                        acc.earliest_expiry_ts * 1000
-                                      ).toLocaleDateString("pt-BR")}`
-                                    : ""
-                                }`
-                              : "Não conectado"}
+                                    ? t.settings.accounts.importedCount(acc.cookie_count)
+                                    : t.settings.accounts.cookieCount(acc.cookie_count)
+                                ) +
+                                (acc.earliest_expiry_ts
+                                  ? t.settings.accounts.expires(formatDate(acc.earliest_expiry_ts * 1000))
+                                  : "")
+                              : t.settings.accounts.notConnected}
                           </div>
                         </div>
                       </div>
@@ -664,10 +647,10 @@ export const SettingsTab: React.FC = () => {
                               onClick={async () => {
                                 await api.connectFirefoxCookies("youtube");
                                 await loadSettings();
-                                setAccountMsg("YouTube conectado aos cookies do Firefox.");
+                                setAccountMsg(t.settings.accounts.firefoxConnected);
                               }}
                             >
-                              Usar Firefox
+                              {t.settings.accounts.useFirefox}
                             </Button>
                             <Button
                               size="sm"
@@ -675,18 +658,16 @@ export const SettingsTab: React.FC = () => {
                               onClick={async () => {
                                 const f = await openDialog({
                                   multiple: false,
-                                  filters: [{ name: "Cookies Netscape", extensions: ["txt"] }],
+                                  filters: [{ name: t.settings.accounts.netscapeFilter, extensions: ["txt"] }],
                                 });
                                 if (typeof f === "string") {
                                   await api.importCookiesFile("youtube", f);
                                   await loadSettings();
-                                  setAccountMsg(
-                                    "cookies.txt importado e criptografado. Você já pode apagar o arquivo original."
-                                  );
+                                  setAccountMsg(t.settings.accounts.imported);
                                 }
                               }}
                             >
-                              Importar cookies.txt
+                              {t.settings.accounts.importCookies}
                             </Button>
                           </>
                         )}
@@ -700,15 +681,13 @@ export const SettingsTab: React.FC = () => {
                                 setAccountMsg(null);
                                 await api.loginPlatform(plat.id);
                                 setOpenLoginPlatform(plat.id);
-                                setAccountMsg(
-                                  `Janela aberta para ${plat.name}. Entre na sua conta e clique em 'Concluir login (salvar cookies)'.`
-                                );
+                                setAccountMsg(t.settings.accounts.windowOpened(plat.name));
                               } catch (e: any) {
                                 setAccountMsg(String(e));
                               }
                             }}
                           >
-                            {plat.id === "youtube" ? "Janela embutida" : "Entrar"}
+                            {plat.id === "youtube" ? t.settings.accounts.embeddedWindow : t.settings.accounts.signIn}
                           </Button>
                         )}
 
@@ -721,13 +700,13 @@ export const SettingsTab: React.FC = () => {
                                 await api.finishLoginPlatform(plat.id);
                                 setOpenLoginPlatform(null);
                                 await loadSettings();
-                                setAccountMsg(`Conta ${plat.name} conectada.`);
+                                setAccountMsg(t.settings.accounts.accountConnected(plat.name));
                               } catch (e: any) {
                                 setAccountMsg(String(e));
                               }
                             }}
                           >
-                            Concluir login (salvar cookies)
+                            {t.settings.accounts.finishLogin}
                           </Button>
                         )}
 
@@ -741,7 +720,7 @@ export const SettingsTab: React.FC = () => {
                               await loadSettings();
                             }}
                           >
-                            Sair
+                            {t.settings.accounts.signOut}
                           </Button>
                         )}
                       </div>
@@ -756,7 +735,7 @@ export const SettingsTab: React.FC = () => {
           {activeSection === "presets" && (
             <>
               <h2 className="font-display" style={{ margin: 0, fontSize: 18 }}>
-                Padrões e presets
+                {t.settings.presets.title}
               </h2>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {presets.map((p) => (
@@ -777,7 +756,7 @@ export const SettingsTab: React.FC = () => {
                         {p.name}{" "}
                         {p.builtin && (
                           <span style={{ fontSize: 11, color: "var(--text-3)", fontWeight: 400 }}>
-                            (padrão)
+                            {t.settings.presets.builtin}
                           </span>
                         )}
                       </div>
@@ -792,7 +771,7 @@ export const SettingsTab: React.FC = () => {
                           await refreshPresets();
                         }}
                       >
-                        <Trash2 size={14} /> Excluir
+                        <Trash2 size={14} /> {t.settings.presets.delete}
                       </Button>
                     )}
                   </div>
@@ -805,17 +784,35 @@ export const SettingsTab: React.FC = () => {
           {activeSection === "appearance" && (
             <>
               <h2 className="font-display" style={{ margin: 0, fontSize: 18 }}>
-                Aparência
+                {t.settings.appearance.title}
               </h2>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{t.settings.appearance.language}</span>
+                <Segmented<LanguageSetting>
+                  id="ui-language"
+                  value={settings.language ?? "auto"}
+                  onChange={(language) => updateSettings({ language })}
+                  options={[
+                    { value: "auto", label: t.settings.appearance.languageAuto },
+                    { value: "pt", label: LANGUAGE_NAMES.pt },
+                    { value: "en", label: LANGUAGE_NAMES.en },
+                    { value: "es", label: LANGUAGE_NAMES.es },
+                  ]}
+                />
+                <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>
+                  {t.settings.appearance.languageAutoHint(LANGUAGE_NAMES[systemLanguage])}
+                </span>
+              </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
                 {(
                   [
-                    { id: "sangue", name: "Sangue", swA: "#FA023E", swB: "#161616" },
-                    { id: "papel", name: "Papel", swA: "#161616", swB: "#F2EEE6" },
-                    { id: "acido", name: "Ácido", swA: "#C6FF00", swB: "#121212" },
-                    { id: "cobalto", name: "Cobalto", swA: "#2B4BFF", swB: "#0D0F1A" },
-                    { id: "breu", name: "Breu", swA: "#000000", swB: "#1A1A1A" },
+                    { id: "sangue", name: t.settings.appearance.themes.sangue, swA: "#FA023E", swB: "#161616" },
+                    { id: "papel", name: t.settings.appearance.themes.papel, swA: "#161616", swB: "#F2EEE6" },
+                    { id: "acido", name: t.settings.appearance.themes.acido, swA: "#C6FF00", swB: "#121212" },
+                    { id: "cobalto", name: t.settings.appearance.themes.cobalto, swA: "#2B4BFF", swB: "#0D0F1A" },
+                    { id: "breu", name: t.settings.appearance.themes.breu, swA: "#000000", swB: "#1A1A1A" },
                   ] as { id: ThemeId; name: string; swA: string; swB: string }[]
                 ).map((th) => {
                   const selected = settings.theme === th.id;
@@ -853,7 +850,7 @@ export const SettingsTab: React.FC = () => {
 
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                  <span>Intensidade do fundo Op-Art</span>
+                  <span>{t.settings.appearance.intensity}</span>
                   <span className="font-mono-num">
                     {Math.round((settings.shader_intensity ?? 1) * 100)}%
                   </span>
@@ -869,9 +866,9 @@ export const SettingsTab: React.FC = () => {
 
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                  <span>Densidade das faixas topográficas</span>
+                  <span>{t.settings.appearance.density}</span>
                   <span className="font-mono-num">
-                    {settings.shader_stripe_density.toFixed(2)}x
+                    {formatDecimal(settings.shader_stripe_density, 2)}x
                   </span>
                 </div>
                 <Slider
@@ -886,7 +883,7 @@ export const SettingsTab: React.FC = () => {
               <Toggle
                 checked={settings.reduce_motion}
                 onChange={(v) => updateSettings({ reduce_motion: v })}
-                label="Reduzir movimento (congela o shader num quadro estático — 0% GPU)"
+                label={t.settings.appearance.reduceMotion}
               />
             </>
           )}
@@ -895,7 +892,7 @@ export const SettingsTab: React.FC = () => {
           {activeSection === "components" && (
             <>
               <h2 className="font-display" style={{ margin: 0, fontSize: 18 }}>
-                Componentes embutidos
+                {t.settings.components.title}
               </h2>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
@@ -927,8 +924,8 @@ export const SettingsTab: React.FC = () => {
                   value={settings.ytdlp_channel}
                   onChange={(ch) => updateSettings({ ytdlp_channel: ch })}
                   options={[
-                    { value: "stable", label: "Canal Stable" },
-                    { value: "nightly", label: "Canal Nightly" },
+                    { value: "stable", label: t.settings.components.stable },
+                    { value: "nightly", label: t.settings.components.nightly },
                   ]}
                 />
                 <Button
@@ -945,7 +942,7 @@ export const SettingsTab: React.FC = () => {
                   }}
                 >
                   <RefreshCw size={14} />{" "}
-                  {updatingYtdlp ? "Atualizando yt-dlp..." : "Atualizar yt-dlp"}
+                  {updatingYtdlp ? t.settings.components.updating : t.settings.components.update}
                 </Button>
 
                 {binsStatus.ytdlp_previous_version && (
@@ -956,19 +953,19 @@ export const SettingsTab: React.FC = () => {
                       setBinsStatus(await api.getBinsStatus());
                     }}
                   >
-                    <RotateCcw size={14} /> Voltar para {binsStatus.ytdlp_previous_version}
+                    <RotateCcw size={14} /> {t.settings.components.rollback(binsStatus.ytdlp_previous_version)}
                   </Button>
                 )}
 
                 <Button
                   variant="secondary"
                   onClick={async () => {
-                    setDiagOutput("Executando yt-dlp -v...");
+                    setDiagOutput(t.settings.components.running);
                     const out = await api.runYtdlpDiagnostic();
                     setDiagOutput(out);
                   }}
                 >
-                  Testar motores (yt-dlp -v)
+                  {t.settings.components.test}
                 </Button>
               </div>
 
@@ -993,7 +990,7 @@ export const SettingsTab: React.FC = () => {
               {/* Detected GPU Encoders & FFmpeg Filters */}
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-                  Encoders de GPU validados (teste real de 0,1 s)
+                  {t.settings.components.gpuEncoders}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {binsStatus.capabilities.hw_encoders.length > 0 ? (
@@ -1004,7 +1001,7 @@ export const SettingsTab: React.FC = () => {
                     ))
                   ) : (
                     <span style={{ fontSize: 12, color: "var(--text-2)" }}>
-                      Nenhum encoder de hardware ativo nesta máquina (usando CPU libx264/libx265/libsvtav1).
+                      {t.settings.components.noGpu}
                     </span>
                   )}
                 </div>
@@ -1012,16 +1009,16 @@ export const SettingsTab: React.FC = () => {
 
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-                  Filtros FFmpeg detectados
+                  {t.settings.components.filters}
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {[
-                    ["soxr (alta precisão)", binsStatus.capabilities.has_soxr],
-                    ["loudnorm (EBU R128)", binsStatus.capabilities.has_loudnorm],
-                    ["rubberband (pitch)", binsStatus.capabilities.has_rubberband],
-                    ["libass (subtitles)", binsStatus.capabilities.has_libass],
-                    ["whisper.cpp", binsStatus.capabilities.has_whisper],
-                    ["palettegen (GIF)", binsStatus.capabilities.has_palettegen],
+                    [t.settings.components.filterNames.soxr, binsStatus.capabilities.has_soxr],
+                    [t.settings.components.filterNames.loudnorm, binsStatus.capabilities.has_loudnorm],
+                    [t.settings.components.filterNames.rubberband, binsStatus.capabilities.has_rubberband],
+                    [t.settings.components.filterNames.libass, binsStatus.capabilities.has_libass],
+                    [t.settings.components.filterNames.whisper, binsStatus.capabilities.has_whisper],
+                    [t.settings.components.filterNames.palettegen, binsStatus.capabilities.has_palettegen],
                   ].map(([name, ok]) => (
                     <Chip key={String(name)} active={Boolean(ok)} disabled={!ok}>
                       {String(name)}
@@ -1033,11 +1030,11 @@ export const SettingsTab: React.FC = () => {
               {/* Searchable Supported Sites (`yt-dlp --list-extractors`) */}
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>
-                  Sites suportados ({extractors.length} extratores)
+                  {t.settings.components.sites(extractors.length)}
                 </div>
                 <input
                   className="op-input"
-                  placeholder="Pesquisar extrator (ex.: youtube, bandcamp, globo, twitch)..."
+                  placeholder={t.settings.components.sitesPlaceholder}
                   value={extractorSearch}
                   onChange={(e) => setExtractorSearch(e.target.value)}
                   style={{ height: 34, padding: "0 10px", fontSize: 12.5 }}
@@ -1084,16 +1081,16 @@ export const SettingsTab: React.FC = () => {
           {activeSection === "advanced" && (
             <>
               <h2 className="font-display" style={{ margin: 0, fontSize: 18 }}>
-                Avançado
+                {t.settings.advanced.title}
               </h2>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <label style={{ fontSize: 13, fontWeight: 600 }}>
-                  Argumentos extras globais do yt-dlp
+                  {t.settings.advanced.extraArgs}
                 </label>
                 <input
                   className="op-input font-mono-num"
-                  placeholder="Ex.: --geo-bypass --socket-timeout 20"
+                  placeholder={t.settings.advanced.extraArgsPlaceholder}
                   value={extraArgsText}
                   onChange={(e) => setExtraArgsText(e.target.value)}
                   onBlur={() =>
@@ -1107,18 +1104,20 @@ export const SettingsTab: React.FC = () => {
                   style={{ height: 36, padding: "0 12px", fontSize: 12.5 }}
                 />
                 <span style={{ fontSize: 11.5, color: "var(--text-3)" }}>
-                  Flags de execução ou saída (<code className="font-mono-num">--exec</code>,{" "}
+                  {t.settings.advanced.blockedBefore}
+                  <code className="font-mono-num">--exec</code>,{" "}
                   <code className="font-mono-num">-o</code>,{" "}
-                  <code className="font-mono-num">--proxy</code>) são bloqueadas por segurança.
+                  <code className="font-mono-num">--proxy</code>
+                  {t.settings.advanced.blockedAfter}
                 </span>
               </div>
 
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <Button variant="secondary" onClick={() => api.openDataFolder("roaming")}>
-                  <FolderOpen size={14} /> Abrir pasta de configuração (%APPDATA%\Boladao)
+                  <FolderOpen size={14} /> {t.settings.advanced.openConfig}
                 </Button>
                 <Button variant="secondary" onClick={() => api.openDataFolder("local")}>
-                  <FolderOpen size={14} /> Abrir pasta de binários e cache (%LOCALAPPDATA%\Boladao)
+                  <FolderOpen size={14} /> {t.settings.advanced.openLocal}
                 </Button>
               </div>
             </>

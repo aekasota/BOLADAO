@@ -92,6 +92,21 @@ pub fn rollback_ytdlp(app: AppHandle, state: State<'_, AppState>) -> Result<Stri
     state.bins.rollback_ytdlp(Some(&app))
 }
 
+/// Windows interface language and regional format, used when the language setting is automatic.
+#[derive(serde::Serialize, Clone)]
+pub struct SystemLanguage {
+    pub language: crate::i18n::Lang,
+    pub locale: String,
+}
+
+#[tauri::command]
+pub fn get_system_language() -> SystemLanguage {
+    SystemLanguage {
+        language: crate::i18n::system(),
+        locale: crate::i18n::system_locale(),
+    }
+}
+
 #[derive(serde::Serialize, Clone)]
 pub struct AppUpdateInfo {
     pub version: String,
@@ -115,7 +130,7 @@ pub fn apply_update_now(app: AppHandle) -> Result<(), String> {
         app.exit(0);
         Ok(())
     } else {
-        Err("Nenhuma atualização pronta para instalar.".to_string())
+        Err(tr!("Nenhuma atualização pronta para instalar.", "No update ready to install.", "No hay ninguna actualización lista para instalar."))
     }
 }
 
@@ -385,7 +400,7 @@ pub fn equivalent_command(state: State<'_, AppState>, job_id: Uuid) -> Result<St
     if let Some(entry) = state.library.get_by_id(job_id) {
         return Ok(entry.equivalent_cmd);
     }
-    Err("Comando equivalente ainda não disponível.".to_string())
+    Err(tr!("Comando equivalente ainda não disponível.", "Equivalent command not available yet.", "El comando equivalente aún no está disponible."))
 }
 
 #[tauri::command]
@@ -412,7 +427,7 @@ pub fn open_data_folder_cmd(which: String) -> Result<(), String> {
 #[tauri::command]
 pub fn start_file_drag(window: WebviewWindow, path: PathBuf) -> Result<(), String> {
     if !path.exists() {
-        return Err("Arquivo não encontrado para arrastar.".to_string());
+        return Err(tr!("Arquivo não encontrado para arrastar.", "File not found to drag.", "No se encontró el archivo para arrastrar."));
     }
     // Use tiny 1x1 valid PNG drag preview icon
     const DRAG_PNG: &[u8] = &[
@@ -440,8 +455,22 @@ pub fn get_settings(state: State<'_, AppState>) -> AppSettings {
 }
 
 #[tauri::command]
-pub fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> Result<(), String> {
+pub fn save_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    mut settings: AppSettings,
+) -> Result<(), String> {
+    {
+        // Speed peaks are measured here; the window's copy of them may be older.
+        let current = state.settings.read();
+        settings.daily_peaks = current.daily_peaks.clone();
+        settings.peak_7d_bps = current.peak_7d_bps;
+    }
     save_settings_to_disk(&settings)?;
+    if settings.language != state.settings.read().language {
+        crate::i18n::apply(settings.language);
+        crate::refresh_tray_texts(&app);
+    }
     state.limiter.apply_profile(
         settings.bandwidth_profile,
         Some(settings.custom_limit_bps),
@@ -494,7 +523,7 @@ pub fn delete_custom_preset(state: State<'_, AppState>, preset_id: String) -> Re
 pub async fn login_platform(app: AppHandle, platform_id: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || open_isolated_login_window(&app, &platform_id))
         .await
-        .map_err(|e| format!("Erro abrindo janela de login: {e}"))?
+        .map_err(|e| tr!("Erro abrindo janela de login: {e}", "Error opening the sign-in window: {e}", "Error al abrir la ventana de inicio de sesión: {e}"))?
 }
 
 #[tauri::command]
@@ -505,7 +534,7 @@ pub async fn finish_login_platform(
 ) -> Result<ConnectedAccount, String> {
     let acc = tokio::task::spawn_blocking(move || harvest_login_window_cookies(&app, &platform_id))
         .await
-        .map_err(|e| format!("Erro lendo cookies: {e}"))??;
+        .map_err(|e| tr!("Erro lendo cookies: {e}", "Error reading cookies: {e}", "Error al leer las cookies: {e}"))??;
     let mut cfg = state.settings.write();
     cfg.accounts.insert(acc.platform_id.clone(), acc.clone());
     save_settings_to_disk(&cfg)?;
@@ -595,7 +624,7 @@ pub async fn generate_spectrogram(
     let mut entry = state
         .library
         .get_by_id(id)
-        .ok_or_else(|| "Item não encontrado na Biblioteca.".to_string())?;
+        .ok_or_else(|| tr!("Item não encontrado na Biblioteca.", "Item not found in the Library.", "Elemento no encontrado en la Biblioteca."))?;
     let (spec_url, cutoff) =
         generate_spectrogram_and_cutoff(id, &entry.primary_path, &state.bins).await?;
     entry.spectrogram_url = Some(spec_url);
@@ -613,9 +642,9 @@ pub async fn run_workshop(
     let mut entry = state
         .library
         .get_by_id(entry_id)
-        .ok_or_else(|| "Item não encontrado na Biblioteca.".to_string())?;
+        .ok_or_else(|| tr!("Item não encontrado na Biblioteca.", "Item not found in the Library.", "Elemento no encontrado en la Biblioteca."))?;
     if !entry.primary_path.is_file() {
-        return Err("O arquivo original não está mais no disco.".to_string());
+        return Err(tr!("O arquivo original não está mais no disco.", "The original file is no longer on disk.", "El archivo original ya no está en el disco."));
     }
     let jg = JobGroup::new().map_err(|e| e.to_string())?;
     let prio = if state.gamemode.status().active {

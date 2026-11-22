@@ -5,8 +5,9 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import * as SliderPrimitive from "@radix-ui/react-slider";
 import { Globe, FolderOpen } from "lucide-react";
 import { getBrandSvgPath } from "../lib/format";
-import { JobState } from "../lib/ipc";
+import { JobState, ThemeId } from "../lib/ipc";
 import { useSettingsStore } from "../stores/settingsStore";
+import { getT } from "../i18n";
 
 export const SPRING_UI = { type: "spring" as const, stiffness: 420, damping: 34 };
 export const SPRING_PANEL = { type: "spring" as const, stiffness: 300, damping: 30 };
@@ -393,21 +394,55 @@ export const StripeProgress: React.FC<{
 // the background of one of the themes (X's cream on Papel, for instance).
 const MONOCHROME_BRANDS = new Set(["x"]);
 
+// Light themes: a brand color too pale for the paper background (TikTok cyan, Kick green) is
+// darkened, keeping its hue, until the mark reaches 3:1 against the darkest Papel surface, the
+// WCAG minimum for meaningful graphics.
+const LIGHT_THEMES = new Set<ThemeId>(["papel"]);
+const MAX_LUMINANCE_ON_PAPER = 0.197; // 3:1 against #DFD8CA (relative luminance ~0.691)
+const legibleColors = new Map<string, string>();
+
+function relativeLuminance(r: number, g: number, b: number): number {
+  const channel = (c: number) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function legibleOnPaper(hex: string): string {
+  const cached = legibleColors.get(hex);
+  if (cached) return cached;
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16));
+  let f = 1;
+  while (f > 0.05 && relativeLuminance(r * f, g * f, b * f) > MAX_LUMINANCE_ON_PAPER) f -= 0.025;
+  const out = f === 1 ? hex : `rgb(${Math.round(r * f)}, ${Math.round(g * f)}, ${Math.round(b * f)})`;
+  legibleColors.set(hex, out);
+  return out;
+}
+
 export const PlatformIcon: React.FC<{
   slug: string;
   color?: string;
   size?: number;
 }> = ({ slug, color = "currentColor", size = 15 }) => {
+  const theme = useSettingsStore((s) => s.settings.theme);
   const path = getBrandSvgPath(slug);
+  const fill = MONOCHROME_BRANDS.has(slug)
+    ? "var(--text)"
+    : LIGHT_THEMES.has(theme)
+    ? legibleOnPaper(color)
+    : color;
   if (!path) {
-    return <Globe size={size} color={color} />;
+    return <Globe size={size} color={fill} />;
   }
   return (
     <svg
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill={MONOCHROME_BRANDS.has(slug) ? "var(--text)" : color}
+      fill={fill}
       aria-hidden="true"
       style={{ flexShrink: 0 }}
     >
@@ -423,7 +458,7 @@ export const PathPreview: React.FC<{
   <button
     type="button"
     onClick={onClick}
-    title="Clique para escolher outra pasta de destino"
+    title={getT().primitives.pickFolder}
     style={{
       width: "100%",
       display: "flex",
@@ -454,7 +489,7 @@ export const PathPreview: React.FC<{
     </span>
     {onClick && (
       <span style={{ color: "var(--text)", fontSize: 11, fontWeight: 600, flexShrink: 0 }}>
-        Trocar
+        {getT().primitives.change}
       </span>
     )}
   </button>

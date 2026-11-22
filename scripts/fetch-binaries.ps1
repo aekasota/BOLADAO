@@ -19,6 +19,16 @@ New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
 $Manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
 
+function Assert-MicrosoftSignature {
+    param([string]$Path)
+    # Authenticode válido e assinado pela Microsoft; qualquer outra coisa não entra no instalador.
+    $sig = Get-AuthenticodeSignature -FilePath $Path
+    $subject = if ($sig.SignerCertificate) { $sig.SignerCertificate.Subject } else { "" }
+    if ($sig.Status -ne "Valid" -or $subject -notmatch "O=Microsoft Corporation") {
+        throw "Assinatura inválida em $Path (status: $($sig.Status); assinante: $subject). O arquivo não pode ir para o instalador."
+    }
+}
+
 function Verify-RemoteChecksum {
     param(
         [string]$ChecksumUrl,
@@ -137,14 +147,22 @@ $wv2Exe = Join-Path $wv2Dir "MicrosoftEdgeWebview2Setup.exe"
 if ($Force -or (-not (Test-Path $wv2Exe))) {
     Write-Host "Baixando bootstrapper oficial do Microsoft Edge WebView2..." -ForegroundColor Cyan
     New-Item -ItemType Directory -Force -Path $wv2Dir | Out-Null
-    $wv2Tmp = "$wv2Exe.tmp"
+    # Termina em .exe: o Windows escolhe o verificador de assinatura pela extensão.
+    $wv2Tmp = Join-Path $wv2Dir "MicrosoftEdgeWebview2Setup.download.exe"
     if (Test-Path $wv2Tmp) { Remove-Item -Force $wv2Tmp }
     & curl.exe -fL --retry 3 --retry-delay 2 -o $wv2Tmp "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
     if ($LASTEXITCODE -ne 0) {
         throw "Download falhou para o bootstrapper do Microsoft Edge WebView2"
     }
+    try {
+        Assert-MicrosoftSignature $wv2Tmp
+    } catch {
+        Remove-Item -Force $wv2Tmp
+        throw
+    }
     Move-Item -Force $wv2Tmp $wv2Exe
 } else {
+    Assert-MicrosoftSignature $wv2Exe
     Write-Host "Cache válido para MicrosoftEdgeWebview2Setup.exe." -ForegroundColor Green
 }
 

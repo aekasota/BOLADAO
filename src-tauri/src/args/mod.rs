@@ -1,6 +1,7 @@
 use crate::classify::MediaMode;
 use crate::paths::{
-    compile_ytdlp_output_template, compute_safe_trim_length, TEMP_SUBDIR_NAME,
+    canonical_template, compile_ytdlp_output_template, compute_safe_trim_length,
+    untitled_template, TEMP_SUBDIR_NAME,
 };
 use crate::spec::{
     AudioFormat, DownloadSpec, LiveDownloadMode, Mp3Quality, SponsorBlockAction, SubtitleMode,
@@ -66,8 +67,10 @@ pub fn validate_extra_args(extra: &[String]) -> Result<(), String> {
             if flag_name.eq_ignore_ascii_case(forbidden)
                 || (forbidden.len() == 2 && trimmed.starts_with(forbidden))
             {
-                return Err(format!(
-                    "O argumento '{forbidden}' é controlado pelo Boladão e não pode ser usado nos extras."
+                return Err(tr!(
+                    "O argumento '{forbidden}' é controlado pelo Boladão e não pode ser usado nos extras.",
+                    "The argument '{forbidden}' is managed by Boladão and can't be used in the extras.",
+                    "El argumento '{forbidden}' lo controla Boladão y no se puede usar en los extras."
                 ));
             }
         }
@@ -82,7 +85,11 @@ pub fn build_ytdlp_args(
     ctx: &ExecContext,
 ) -> Result<Vec<OsString>, String> {
     if !(url.starts_with("http://") || url.starts_with("https://")) {
-        return Err("URL inválida: apenas http:// e https:// são permitidos.".to_string());
+        return Err(tr!(
+            "URL inválida: apenas http:// e https:// são permitidos.",
+            "Invalid URL: only http:// and https:// are allowed.",
+            "URL no válida: solo se permiten http:// y https://."
+        ));
     }
     validate_extra_args(&spec.extra_ytdlp_args)?;
 
@@ -142,7 +149,12 @@ pub fn build_ytdlp_args(
     push2(&mut args, "--paths", &format!("home:{}", home_dir.display()));
     push2(&mut args, "--paths", &format!("temp:{}", temp_dir.display()));
 
-    let mut tpl = spec.output_template.clone();
+    // `{tipo}` becomes the folder of the media type, in the interface language.
+    let kind_folder = match spec.mode {
+        MediaMode::Audio => tr!("Música", "Music", "Música"),
+        MediaMode::Video => tr!("Vídeos", "Videos", "Videos"),
+    };
+    let mut tpl = canonical_template(&spec.output_template).replace("{tipo}", &kind_folder);
     if spec.playlist_numbering && !tpl.contains("{nn}") {
         if let Some(idx) = tpl.rfind('\\').or_else(|| tpl.rfind('/')) {
             let (prefix, rest) = tpl.split_at(idx + 1);
@@ -161,7 +173,7 @@ pub fn build_ytdlp_args(
     push2(&mut args, "--output", &compiled_tpl);
     if spec.split_chapters {
         let chapter_tpl = compiled_tpl.replace(
-            "%(title| Sem título)s",
+            &untitled_template(),
             "%(section_number)02d - %(section_title)s",
         );
         push2(&mut args, "--output", &format!("chapter:{chapter_tpl}"));
@@ -569,6 +581,33 @@ mod tests {
                 .collect();
 
         insta::assert_yaml_snapshot!("rich_video_extras_args", args);
+    }
+
+    #[test]
+    fn templates_accept_any_language_and_fill_the_media_type() {
+        let ctx = test_ctx();
+        let output_of = |template: &str, mode: MediaMode| -> String {
+            let spec = DownloadSpec {
+                mode,
+                output_root: PathBuf::from(r"D:\Media"),
+                output_template: template.to_string(),
+                ..Default::default()
+            };
+            let args: Vec<String> = build_ytdlp_args("https://www.youtube.com/watch?v=x", &spec, &ctx)
+                .unwrap()
+                .into_iter()
+                .map(|s| s.to_string_lossy().into_owned())
+                .collect();
+            let i = args.iter().position(|a| a == "--output").unwrap();
+            args[i + 1].clone()
+        };
+
+        let original = output_of("{tipo}\\{artista}\\{faixa}", MediaMode::Audio);
+        assert_eq!(output_of("{type}\\{artist}\\{track}", MediaMode::Audio), original);
+        assert_eq!(output_of("{tipo}\\{artista}\\{pista}", MediaMode::Audio), original);
+        // `{tipo}` is the media folder itself, not a yt-dlp field that never exists.
+        assert!(original.starts_with("Música\\"), "{original}");
+        assert!(output_of("{tipo}\\{titulo}", MediaMode::Video).starts_with("Vídeos\\"));
     }
 
     #[test]

@@ -64,13 +64,13 @@ pub struct PathPreviewSample {
 impl Default for PathPreviewSample {
     fn default() -> Self {
         Self {
-            media_type: "Vídeos".to_string(),
+            media_type: tr!("Vídeos", "Videos", "Videos"),
             platform: "YouTube".to_string(),
-            creator: "Canal Exemplo".to_string(),
-            playlist: Some("Favoritos".to_string()),
+            creator: tr!("Canal Exemplo", "Example Channel", "Canal de ejemplo"),
+            playlist: Some(tr!("Favoritos", "Favorites", "Favoritos")),
             index: Some(1),
-            title: "Vídeo de Teste".to_string(),
-            track: Some("Faixa de Teste".to_string()),
+            title: tr!("Vídeo de Teste", "Test Video", "Video de prueba"),
+            track: Some(tr!("Faixa de Teste", "Test Track", "Pista de prueba")),
             id: "dQw4w9WgXcQ".to_string(),
             year: "2026".to_string(),
             month: "11".to_string(),
@@ -361,20 +361,64 @@ pub fn sanitize_windows_component(raw: &str) -> String {
 /// with robust field fallbacks (`%(artist,creator,uploader,channel|Desconhecido)s`, etc.).
 ///
 /// Supported placeholders:
+/// Template tokens in English and Spanish, mapped to the original Portuguese ones, so a template
+/// keeps working whatever language it was written in.
+const TOKEN_ALIASES: &[(&str, &str)] = &[
+    ("{type}", "{tipo}"),
+    ("{platform}", "{plataforma}"),
+    ("{channel}", "{canal}"),
+    ("{artist}", "{artista}"),
+    ("{álbum}", "{album}"),
+    ("{title}", "{titulo}"),
+    ("{título}", "{titulo}"),
+    ("{track}", "{faixa}"),
+    ("{pista}", "{faixa}"),
+    ("{year}", "{ano}"),
+    ("{año}", "{ano}"),
+    ("{month}", "{mes}"),
+];
+
+/// Normalizes separators and rewrites English and Spanish tokens to the canonical ones.
+pub fn canonical_template(template: &str) -> String {
+    let mut out = template.replace('/', "\\");
+    for (alias, canonical) in TOKEN_ALIASES {
+        out = out.replace(alias, canonical);
+    }
+    out
+}
+
+/// yt-dlp field for the title, with the "untitled" fallback of the interface language.
+pub fn untitled_template() -> String {
+    format!("%(title|{})s", tr!(" Sem título", " Untitled", " Sin título"))
+}
+
 /// `{tipo}`, `{plataforma}`, `{canal}`, `{artista}`, `{playlist}`, `{album}`,
 /// `{nn}`, `{titulo}`, `{faixa}`, `{id}`, `{ano}`, `{mes}`
 pub fn compile_ytdlp_output_template(template: &str) -> String {
-    let normalized = template.replace('/', "\\");
+    let normalized = canonical_template(template);
+    // Fallbacks for metadata the site does not provide, in the interface language.
+    let kind = format!("%(boladao_kind|{})s", tr!("Mídia", "Media", "Medios"));
+    let channel = format!(
+        "%(channel,uploader,creator,artist|{})s",
+        tr!("Canal", "Channel", "Canal")
+    );
+    let artist = format!(
+        "%(artist,creator,uploader,channel|{})s",
+        tr!("Artista", "Artist", "Artista")
+    );
+    let loose = format!("%(playlist_title,album|{})s", tr!("Avulsos", "Loose", "Sueltos"));
+    let title = untitled_template();
+    let track = format!("%(track,title|{})s", tr!("Faixa", "Track", "Pista"));
     let replacements: &[(&str, &str)] = &[
-        ("{tipo}", "%(boladao_kind|Mídia)s"),
+        ("{tipo}", &kind),
         ("{plataforma}", "%(extractor_key|Web)s"),
-        ("{canal}", "%(channel,uploader,creator,artist|Canal)s"),
-        ("{artista}", "%(artist,creator,uploader,channel|Artista)s"),
-        ("{playlist}", "%(playlist_title,album|Avulsos)s"),
+        ("{canal}", &channel),
+        ("{artista}", &artist),
+        ("{playlist}", &loose),
         ("{album}", "%(album,playlist_title|Singles)s"),
         ("{nn}", "%(playlist_index|01)02d"),
-        ("{titulo}", "%(title| Sem título)s"),
-        ("{faixa}", "%(track,title|Faixa)s"),
+        ("{titulo}", &title),
+        ("{faixa}", &track),
         ("{id}", "%(id)s"),
         ("{ano}", "%(upload_date>%Y,release_year|2026)s"),
         ("{mes}", "%(upload_date>%m|01)s"),
@@ -430,7 +474,7 @@ pub fn preview_output_path(root_dir: &Path, template: &str, sample: &PathPreview
     map.insert("{ano}", sample.ano_or_default());
     map.insert("{mes}", sample.mes_or_default());
 
-    let mut rendered = template.replace('/', "\\");
+    let mut rendered = canonical_template(template);
     for (k, v) in map {
         rendered = rendered.replace(k, v);
     }
@@ -513,7 +557,7 @@ pub fn cleanup_stale_temp_dirs(roots: &[PathBuf]) {
 /// Opens a file with the default OS handler (`ShellExecute` / `explorer`).
 pub fn open_file_default(path: &Path) -> Result<(), String> {
     if !path.exists() {
-        return Err("Arquivo não encontrado no disco.".to_string());
+        return Err(tr!("Arquivo não encontrado no disco.", "File not found on disk.", "Archivo no encontrado en el disco."));
     }
     #[cfg(windows)]
     {
@@ -523,7 +567,7 @@ pub fn open_file_default(path: &Path) -> Result<(), String> {
             .arg(path)
             .creation_flags(crate::winproc::CREATE_NO_WINDOW_FLAG)
             .spawn()
-            .map_err(|e| format!("Falha ao abrir arquivo: {e}"))?;
+            .map_err(|e| tr!("Falha ao abrir arquivo: {e}", "Couldn't open the file: {e}", "No se pudo abrir el archivo: {e}"))?;
         Ok(())
     }
     #[cfg(not(windows))]
@@ -535,7 +579,7 @@ pub fn open_file_default(path: &Path) -> Result<(), String> {
 /// Opens an `https://` link in the default browser.
 pub fn open_url_default(url: &str) -> Result<(), String> {
     if !url.starts_with("https://") {
-        return Err("Link inválido.".to_string());
+        return Err(tr!("Link inválido.", "Invalid link.", "Enlace no válido."));
     }
     #[cfg(windows)]
     {
@@ -545,7 +589,7 @@ pub fn open_url_default(url: &str) -> Result<(), String> {
             .arg(url)
             .creation_flags(crate::winproc::CREATE_NO_WINDOW_FLAG)
             .spawn()
-            .map_err(|e| format!("Falha ao abrir o navegador: {e}"))?;
+            .map_err(|e| tr!("Falha ao abrir o navegador: {e}", "Couldn't open the browser: {e}", "No se pudo abrir el navegador: {e}"))?;
         Ok(())
     }
     #[cfg(not(windows))]
@@ -566,15 +610,15 @@ pub fn reveal_in_explorer(path: &Path) -> Result<(), String> {
                 .arg(select_arg)
                 .creation_flags(crate::winproc::CREATE_NO_WINDOW_FLAG)
                 .spawn()
-                .map_err(|e| format!("Falha ao abrir pasta: {e}"))?;
+                .map_err(|e| tr!("Falha ao abrir pasta: {e}", "Couldn't open the folder: {e}", "No se pudo abrir la carpeta: {e}"))?;
         } else if let Some(parent) = path.parent().filter(|p| p.exists()) {
             std::process::Command::new("explorer.exe")
                 .arg(parent)
                 .creation_flags(crate::winproc::CREATE_NO_WINDOW_FLAG)
                 .spawn()
-                .map_err(|e| format!("Falha ao abrir pasta: {e}"))?;
+                .map_err(|e| tr!("Falha ao abrir pasta: {e}", "Couldn't open the folder: {e}", "No se pudo abrir la carpeta: {e}"))?;
         } else {
-            return Err("Pasta ou arquivo não encontrado.".to_string());
+            return Err(tr!("Pasta ou arquivo não encontrado.", "Folder or file not found.", "Carpeta o archivo no encontrado."));
         }
         Ok(())
     }

@@ -39,6 +39,7 @@ export type CollisionPolicy = "keep_both" | "overwrite" | "skip";
 export type BandwidthProfile = "unlimited" | "balanced" | "light" | "custom";
 export type GameModeOverride = "auto" | "force_on" | "force_off";
 export type ThemeId = "sangue" | "papel" | "acido" | "cobalto" | "breu";
+export type LanguageSetting = "auto" | "pt" | "en" | "es";
 export type SpeedUnit = "bytes_per_sec" | "bits_per_sec";
 export type ProbeScope = "single_video" | "full_playlist";
 
@@ -345,6 +346,7 @@ export interface AppSettings {
   custom_presets: Preset[];
   last_spec_by_platform: Record<string, DownloadSpec>;
   theme: ThemeId;
+  language: LanguageSetting;
   shader_intensity: number;
   shader_outside_intensity: number;
   shader_stripe_density: number;
@@ -427,6 +429,14 @@ export interface EnqueueRequest {
   group_id?: string | null;
   group_title?: string | null;
   playlist_index?: number | null;
+}
+
+/** Maps a BCP 47 tag to a supported language; anything else falls back to English. */
+export function languageFromTag(tag: string | undefined): "pt" | "en" | "es" {
+  const t = (tag ?? "").toLowerCase();
+  if (t.startsWith("pt")) return "pt";
+  if (t.startsWith("es")) return "es";
+  return "en";
 }
 
 export function isTauriRuntime(): boolean {
@@ -551,6 +561,11 @@ export const api = {
 
   rollbackYtdlp: (): Promise<string> =>
     isTauriRuntime() ? invoke("rollback_ytdlp") : Promise.resolve("2026.10.26"),
+
+  getSystemLanguage: (): Promise<{ language: "pt" | "en" | "es"; locale: string }> =>
+    isTauriRuntime()
+      ? invoke("get_system_language")
+      : Promise.resolve({ language: languageFromTag(navigator.language), locale: navigator.language }),
 
   getPendingUpdate: (): Promise<AppUpdateInfo | null> =>
     isTauriRuntime() ? invoke("get_pending_update") : Promise.resolve(null),
@@ -858,6 +873,7 @@ export function fallbackSettings(): AppSettings {
     custom_presets: [],
     last_spec_by_platform: {},
     theme: "sangue",
+    language: "auto",
     shader_intensity: 1.0,
     shader_outside_intensity: 1.0,
     shader_stripe_density: 1.0,
