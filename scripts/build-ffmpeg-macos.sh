@@ -58,13 +58,21 @@ done
   if [[ "$arch" == x86_64 ]]; then
     assembly+=(--disable-x86asm)
   fi
+  # --disable-autodetect também desliga o zlib, de que o PNG depende (capas, espectrograma, paleta
+  # do GIF). zlib, bzip2 e iconv já vêm com o macOS.
   ./configure --arch="$ffmpeg_arch" --target-os=darwin --enable-cross-compile \
     --cc=clang --extra-cflags="$flags -I$prefix/include" --extra-ldflags="$flags -L$prefix/lib" \
     --pkg-config="$work/pkgconf-native/bin/pkgconf" --pkg-config-flags=--static \
     --disable-autodetect --disable-doc --disable-debug --disable-ffplay \
     --enable-static --disable-shared --enable-gpl \
     --enable-libx264 --enable-libmp3lame --enable-libopus --enable-securetransport \
-    --enable-videotoolbox --enable-audiotoolbox ${assembly[@]+"${assembly[@]}"}
+    --enable-videotoolbox --enable-audiotoolbox --enable-zlib --enable-bzlib --enable-iconv \
+    ${assembly[@]+"${assembly[@]}"}
+  # O configure deixa de fora, sem erro, o que não encontra no SDK.
+  grep -q '^#define CONFIG_PNG_ENCODER 1' config_components.h \
+    || { echo "FFmpeg ficou sem PNG: o zlib do SDK não foi encontrado." >&2; exit 1; }
+  grep -q '^#define CONFIG_SECURETRANSPORT 1' config.h \
+    || { echo "FFmpeg ficou sem https: o SecureTransport do SDK não foi encontrado." >&2; exit 1; }
   make -j"$jobs" ffmpeg ffprobe
   /usr/bin/install -m 755 ffmpeg ffprobe "$output/"
   /usr/bin/install -m 644 COPYING.GPLv2 "$output/LICENSE"

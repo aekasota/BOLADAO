@@ -725,6 +725,7 @@ Pode, com cuidado. Usar uma conta logada com o yt-dlp pode levar a restrições 
 - **Transcrição experimental.** O modelo `base` do Whisper (~148 MB) não vai no instalador. Ele é baixado do Hugging Face na primeira vez em que a transcrição roda.
 - **Modo Jogo no Linux e no macOS.** Ele entra pela lista de jogos (no Linux, jogos do Proton aparecem com o nome do `.exe`). A detecção de qualquer app em tela cheia só existe no Windows.
 - **macOS sem notarização.** Sem a conta paga de desenvolvedor da Apple, a primeira abertura pede a liberação em *Privacidade e Segurança*. Como cada versão tem uma assinatura local nova, o macOS também pode pedir de novo acesso aos cookies salvos no Keychain depois de uma atualização.
+- **Oficina no macOS.** O FFmpeg do Mac é compilado só com o essencial: x264, LAME, Opus e VideoToolbox. Mudar o tom, queimar legenda e transcrever não aparecem lá, e a Oficina não recodifica vídeo em AV1, porque falta um decodificador de AV1 por software.
 - **Linux sem chaveiro.** Num sistema sem GNOME Keyring nem KWallet, os cookies ficam num arquivo legível só pela sua conta, e não criptografados.
 - **Oficina parcial na interface.** O pipeline já aceita fade, mono/estéreo, escala, FPS, extração de quadro em PNG e recodificação em HEVC e AV1, mas esses controles ainda não estão na tela.
 

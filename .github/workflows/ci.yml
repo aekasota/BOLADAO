@@ -20,9 +20,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -38,7 +38,7 @@ jobs:
 
       # yt-dlp, Deno, FFmpeg and the WebView2 bootstrapper are embedded at build time.
       - name: Cache engines
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             vendor/cache
@@ -63,14 +63,14 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: System libraries (WebKitGTK, tray, Secret Service)
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -82,7 +82,7 @@ jobs:
         run: npm run build
 
       - name: Cache engines
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             vendor/cache
@@ -105,11 +105,11 @@ jobs:
     # GitHub retires each macOS image on a schedule (macos-14 went in November 2026). The runner's
     # version doesn't limit where the app runs, so the job follows the newest image.
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -120,14 +120,19 @@ jobs:
       - name: Type-check and build the frontend
         run: npm run build
 
-      # The tests never run the engines, and building FFmpeg from source takes long: the real
-      # engines are built in the release workflow.
-      - name: Placeholder engines
-        run: |
-          for c in ytdlp deno ffmpeg; do
-            mkdir -p "vendor/bin/aarch64-apple-darwin/$c"
-            echo placeholder > "vendor/bin/aarch64-apple-darwin/$c/.placeholder"
-          done
+      # Real engines, as on the other systems: the tests check what gets embedded, and this is where
+      # the FFmpeg recipe of the release first runs. Compiling FFmpeg takes a while, so the cache
+      # keeps it, and the release workflow restores the same cache for Apple Silicon.
+      - name: Cache engines
+        uses: actions/cache@v6
+        with:
+          path: |
+            vendor/cache
+            vendor/bin/aarch64-apple-darwin
+          key: engines-macos-aarch64-${{ hashFiles('vendor/aarch64-apple-darwin.json', 'vendor/ffmpeg-sources.json', 'scripts/fetch-binaries.py', 'scripts/build-ffmpeg-macos.sh') }}
+
+      - name: Fetch engines (pinned versions, checksums verified, FFmpeg built from source)
+        run: python3 scripts/fetch-binaries.py aarch64-apple-darwin
 
       - uses: dtolnay/rust-toolchain@stable
 
