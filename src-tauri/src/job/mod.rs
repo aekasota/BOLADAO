@@ -3,7 +3,8 @@ use crate::bins::BinManager;
 use crate::classify::{MediaMode, SourceKind};
 use crate::errors::{map_stderr_to_job_error, ErrorAction, JobError};
 use crate::paths::{
-    extract_drive_label, free_disk_bytes, next_available_collision_path, CollisionPolicy,
+    created_before, deliver_keeping_both, extract_drive_label, free_disk_bytes, CollisionPolicy,
+    TEMP_SUBDIR_NAME,
 };
 use crate::spec::{AudioFormat, DownloadSpec, VideoProfile};
 use crate::winproc::{spawn_in_job, JobGroup, ProcessPriority};
@@ -12,7 +13,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -494,7 +495,14 @@ pub struct ActiveJobHandle {
     pub canceled_flag: Arc<AtomicBool>,
 }
 
-/// Executes a single `Job` end-to-end (`yt-dlp` -> collision resolution -> FFmpeg Workshop).
+/// A "Keep both" job's own folder inside the destination's `.boladao-tmp`, where yt-dlp and the
+/// Workshop leave the finished files before they move into place. Short, to spare `MAX_PATH`.
+pub fn staging_dir(job_id: Uuid, output_root: &Path) -> PathBuf {
+    let id = job_id.simple().to_string();
+    output_root.join(TEMP_SUBDIR_NAME).join(&id[..8])
+}
+
+/// Executes a single `Job` end-to-end (`yt-dlp` -> FFmpeg Workshop -> collision resolution).
 #[allow(clippy::too_many_arguments)]
 pub async fn execute_job_pipeline<F>(
     mut job: Job,
@@ -548,6 +556,12 @@ where
 
     let mut tried_impersonate = ctx.impersonate_target.is_some();
 
+    // "Keep both" downloads into a folder of the job's own: an existing file in the destination
+    // can't make yt-dlp skip the download, and the Workshop only touches the new one.
+    let staging = (collision_policy == CollisionPolicy::KeepBoth)
+        .then(|| staging_dir(job.id, &job.spec.output_root));
+    ctx.staging_dir = staging.clone();
+
     let discovered_files = loop {
         let mut args = match build_ytdlp_args(&job.url, &job.spec, &ctx) {
             Ok(a) => a,
@@ -570,10 +584,8 @@ where
         match collision_policy {
             CollisionPolicy::Overwrite => args.insert(0, "--force-overwrites".into()),
             CollisionPolicy::Skip => args.insert(0, "--no-overwrites".into()),
-            CollisionPolicy::KeepBoth => {
-                // If an identical output already exists, we avoid clobbering by letting yt-dlp write or renaming
-                args.insert(0, "--no-overwrites".into());
-            }
+            // Its folder starts empty; the final name is settled when the files move out of it.
+            CollisionPolicy::KeepBoth => {}
         }
 
         job.equivalent_cmd = format_equivalent_command(&bins.ytdlp_exe(), &args, true);
@@ -657,6 +669,7 @@ where
         let exit = child.wait().await;
 
         if handle.canceled_flag.load(Ordering::SeqCst) {
+            discard_staging(staging.as_deref());
             job.state = JobState::Canceled;
             job.progress.stage = "Cancelado".to_string();
             job.progress.speed_bps = 0;
@@ -701,8 +714,22 @@ where
 
     let mut outputs = discovered_files;
 
+    // With "Skip", yt-dlp hands back the file that was already there: the Workshop leaves it as is.
+    let kept_existing = collision_policy == CollisionPolicy::Skip
+        && outputs
+            .first()
+            .is_some_and(|p| created_before(p, job.created_at.into()));
+    if kept_existing {
+        job.push_log(tr!(
+            "[boladão] O arquivo já existia; a Oficina não mexeu nele.",
+            "[boladão] The file already existed; the Workshop left it untouched.",
+            "[boladão] El archivo ya existía; el Taller no lo tocó."
+        ));
+    }
+
     // Run optional FFmpeg Workshop pipeline if any step is configured
     if !outputs.is_empty()
+        && !kept_existing
         && job
             .spec
             .workshop
@@ -734,6 +761,7 @@ where
         .await;
 
         if handle.canceled_flag.load(Ordering::SeqCst) {
+            discard_staging(staging.as_deref());
             job.state = JobState::Canceled;
             job.progress.stage = "Cancelado".to_string();
             job.finished_at = Some(Utc::now());
@@ -761,21 +789,64 @@ where
             Err(err_msg) => {
                 job.push_log(&err_msg);
                 let drive = extract_drive_label(&job.spec.output_root);
+                let error = map_stderr_to_job_error(&err_msg, &job.source.platform_id, &drive);
+                // An error that would repeat still hands over the unprocessed download, as before;
+                // a transient one keeps it in the job's folder, so the automatic retry reuses it.
+                if !error.transient {
+                    if let Some(dir) = &staging {
+                        let stem = file_stem_of(outputs.first());
+                        let _ = deliver_keeping_both(dir, &job.spec.output_root, &stem);
+                    }
+                }
                 job.state = JobState::Failed;
                 job.finished_at = Some(Utc::now());
-                job.error = Some(map_stderr_to_job_error(
-                    &err_msg,
-                    &job.source.platform_id,
-                    &drive,
-                ));
+                job.error = Some(error);
                 on_update(&job);
                 return job;
             }
         }
     }
 
-    // Ensure collision policy `KeepBoth` suffix if needed when multiple runs target the same file
-    let _ = next_available_collision_path; // available for manual re-downloads
+    // "Keep both": the finished files leave the job's folder, numbered if a name is taken.
+    if let Some(dir) = &staging {
+        match deliver_keeping_both(dir, &job.spec.output_root, &file_stem_of(outputs.first())) {
+            Ok(moved) => {
+                outputs = outputs
+                    .iter()
+                    .filter_map(|out| {
+                        moved
+                            .iter()
+                            .find(|(from, _)| from.as_os_str().eq_ignore_ascii_case(out.as_os_str()))
+                            .map(|(_, to)| to.clone())
+                    })
+                    .collect();
+            }
+            Err(e) => {
+                let root = job.spec.output_root.display().to_string();
+                job.state = JobState::Failed;
+                job.progress.speed_bps = 0;
+                job.finished_at = Some(Utc::now());
+                job.error = Some(JobError {
+                    code: "move_failed".to_string(),
+                    message_pt: tr!(
+                        "Não foi possível mover o download para {root}: {e}",
+                        "Couldn't move the download to {root}: {e}",
+                        "No se pudo mover la descarga a {root}: {e}"
+                    ),
+                    hint_pt: Some(tr!(
+                        "Confira se dá para gravar na pasta de destino e tente de novo.",
+                        "Check that the destination folder can be written to and try again.",
+                        "Comprueba que se pueda escribir en la carpeta de destino e inténtalo de nuevo."
+                    )),
+                    action: ErrorAction::Retry,
+                    transient: false,
+                    suggest_impersonate: false,
+                });
+                on_update(&job);
+                return job;
+            }
+        }
+    }
 
     job.outputs = outputs;
     job.state = JobState::Done;
@@ -786,6 +857,19 @@ where
     job.finished_at = Some(Utc::now());
     on_update(&job);
     job
+}
+
+/// A canceled job's own folder goes away with everything in it.
+fn discard_staging(staging: Option<&Path>) {
+    if let Some(dir) = staging {
+        let _ = fs::remove_dir_all(dir);
+    }
+}
+
+fn file_stem_of(path: Option<&PathBuf>) -> String {
+    path.and_then(|p| p.file_stem())
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 pub fn format_bytes_pt(bytes: u64) -> String {

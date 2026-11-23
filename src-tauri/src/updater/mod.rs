@@ -1,11 +1,14 @@
 //! Self-update through GitHub Releases, with no server of our own.
 //!
-//! Every release carries `latest.json` (version, download URL and a minisign signature of
-//! `Boladao-Instalador.exe`), produced by `scripts/build-installer.ps1`. The app reads it, downloads
-//! the installer through the bandwidth limiter, checks the signature against `PUBLIC_KEY` and keeps
-//! the file in `%LOCALAPPDATA%\Boladao\updates`. The update is applied when the user restarts from
-//! the banner or, at the latest, the next time the app opens.
+//! Every release carries one manifest per system (version, download URL and a minisign signature
+//! of the package): `latest.json` for `Boladao-Instalador.exe` on Windows (scripts/build-installer.ps1),
+//! `latest-linux-x86_64.json` for the AppImage and `latest-macos.json` for the `.app` packed as
+//! `.tar.gz` (both from the release workflow). The app reads its manifest, downloads the package
+//! through the bandwidth limiter, checks the signature against `PUBLIC_KEY` and keeps the file in
+//! its data folder (`updates`). The update is applied when the user restarts from the banner or,
+//! at the latest, the next time the app opens.
 
+#[cfg(windows)]
 use crate::installer::copy_clean_executable;
 use crate::paths::app_local_dir;
 use base64::Engine;
@@ -14,8 +17,26 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-/// GitHub redirects `releases/latest/download/<asset>` to the newest published release.
-const MANIFEST_URL: &str = "https://github.com/aekasota/BOLADAO/releases/latest/download/latest.json";
+/// This system's manifest. GitHub redirects `releases/latest/download/<asset>` to the newest
+/// published release.
+#[cfg(windows)]
+const MANIFEST_NAME: &str = "latest.json";
+#[cfg(target_os = "linux")]
+const MANIFEST_NAME: &str = "latest-linux-x86_64.json";
+#[cfg(target_os = "macos")]
+const MANIFEST_NAME: &str = "latest-macos.json";
+
+/// Extension of the downloaded package.
+#[cfg(windows)]
+const PACKAGE_EXT: &str = "exe";
+#[cfg(target_os = "linux")]
+const PACKAGE_EXT: &str = "AppImage";
+#[cfg(target_os = "macos")]
+const PACKAGE_EXT: &str = "app.tar.gz";
+
+fn manifest_url() -> String {
+    format!("https://github.com/aekasota/BOLADAO/releases/latest/download/{MANIFEST_NAME}")
+}
 /// Updates may only come from this repository's releases.
 const DOWNLOAD_PREFIX: &str = "https://github.com/aekasota/BOLADAO/releases/download/";
 /// Public half of the minisign key that signs releases. The private half never enters the
@@ -39,6 +60,38 @@ pub struct PendingUpdate {
     pub notes: Option<String>,
     file: PathBuf,
     signature: String,
+}
+
+/// What an update replaces: the `.exe` on Windows, the AppImage on Linux and the `.app` bundle on
+/// macOS. `None` when this copy does not update itself: a development build, or a `.deb` install,
+/// which the system's package manager updates.
+pub fn install_target() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        std::env::current_exe().ok()
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::env::var_os("APPIMAGE").map(PathBuf::from).filter(|p| p.is_file())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let exe = std::env::current_exe().ok()?;
+        exe.ancestors()
+            .find(|p| p.extension().is_some_and(|e| e == "app"))
+            .map(Path::to_path_buf)
+    }
+}
+
+/// Where the replaced version stays until the next start: `<exe>.exe.old` on Windows,
+/// `<AppImage>.old` and `<bundle>.app.old` elsewhere.
+fn old_path(target: &Path) -> PathBuf {
+    if cfg!(windows) {
+        return target.with_extension("exe.old");
+    }
+    let mut name = target.file_name().unwrap_or_default().to_os_string();
+    name.push(".old");
+    target.with_file_name(name)
 }
 
 fn updates_dir() -> PathBuf {
@@ -99,6 +152,9 @@ fn discard_pending() {
 /// Checks the latest release and, when it is newer, downloads and verifies it.
 /// Returns the update that is ready to apply, if any.
 pub async fn check_and_download(proxy_url: Option<String>) -> Result<Option<PendingUpdate>, String> {
+    if install_target().is_none() {
+        return Ok(None);
+    }
     let mut builder = reqwest::Client::builder()
         .user_agent(concat!("Boladao/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(15));
@@ -109,7 +165,7 @@ pub async fn check_and_download(proxy_url: Option<String>) -> Result<Option<Pend
     let client = builder.build().map_err(|e| e.to_string())?;
 
     let resp = client
-        .get(MANIFEST_URL)
+        .get(manifest_url())
         .timeout(Duration::from_secs(20))
         .send()
         .await
@@ -124,13 +180,13 @@ pub async fn check_and_download(proxy_url: Option<String>) -> Result<Option<Pend
         .await
         .map_err(|e| e.to_string())?;
     let manifest: Manifest = serde_json::from_str(text.trim_start_matches('\u{feff}'))
-        .map_err(|e| format!("latest.json inválido: {e}"))?;
+        .map_err(|e| format!("{MANIFEST_NAME} inválido: {e}"))?;
 
     if !is_newer(&manifest.version, env!("CARGO_PKG_VERSION")) {
         return Ok(None);
     }
     if !manifest.url.starts_with(DOWNLOAD_PREFIX) {
-        return Err("O latest.json aponta para fora das releases do Boladão.".to_string());
+        return Err(format!("O {MANIFEST_NAME} aponta para fora das releases do Boladão."));
     }
     if let Some(pending) = read_pending() {
         if pending.version == manifest.version {
@@ -152,8 +208,8 @@ pub async fn check_and_download(proxy_url: Option<String>) -> Result<Option<Pend
     let dir = updates_dir();
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let file = dir.join(format!("Boladao-{}.exe", manifest.version));
-    let partial = file.with_extension("exe.part");
+    let file = dir.join(format!("Boladao-{}.{PACKAGE_EXT}", manifest.version));
+    let partial = dir.join(format!("Boladao-{}.part", manifest.version));
     fs::write(&partial, &bytes).map_err(|e| format!("Erro salvando a atualização: {e}"))?;
     fs::rename(&partial, &file).map_err(|e| format!("Erro salvando a atualização: {e}"))?;
 
@@ -168,15 +224,18 @@ pub async fn check_and_download(proxy_url: Option<String>) -> Result<Option<Pend
     Ok(Some(pending))
 }
 
-/// Replaces the running executable with the pending update and, if asked, starts the new version.
-/// Windows lets a running `.exe` be renamed (not deleted), so the current file becomes `<exe>.old`
-/// and is removed on the next start. Returns `Ok(true)` when the update was installed.
+/// Replaces the running version with the pending update and, if asked, starts the new version.
+/// A running `.exe`, AppImage or `.app` can be renamed (not deleted), so the current one becomes
+/// `<target>.old` and is removed on the next start. Returns `Ok(true)` when the update was installed.
 pub fn apply_pending(relaunch: bool) -> Result<bool, String> {
     let Some(pending) = read_pending() else {
         return Ok(false);
     };
-    let current = std::env::current_exe().map_err(|e| e.to_string())?;
-    let installed = install_over(&current, &pending.file, &pending.signature);
+    let Some(target) = install_target() else {
+        discard_pending();
+        return Ok(false);
+    };
+    let installed = install_over(&target, &pending.file, &pending.signature);
     if installed.is_err() {
         discard_pending();
     }
@@ -184,40 +243,105 @@ pub fn apply_pending(relaunch: bool) -> Result<bool, String> {
     discard_pending();
 
     if relaunch {
-        let dir = current.parent().map(Path::to_path_buf).unwrap_or_default();
         // The new version waits for this process to close; otherwise it would find the old one
         // still open and hand control back to it.
-        std::process::Command::new(&current)
+        let pid = std::process::id().to_string();
+        #[cfg(not(target_os = "macos"))]
+        let launched = std::process::Command::new(&target)
             .arg(crate::instance::WAIT_FOR_PID_ARG)
-            .arg(std::process::id().to_string())
-            .current_dir(dir)
-            .spawn()
-            .map_err(|e| format!("Atualizado, mas não foi possível reabrir o Boladão: {e}"))?;
+            .arg(pid)
+            .current_dir(target.parent().map(Path::to_path_buf).unwrap_or_default())
+            .spawn();
+        #[cfg(target_os = "macos")]
+        let launched = std::process::Command::new("/usr/bin/open")
+            .arg("-n")
+            .arg(&target)
+            .arg("--args")
+            .arg(crate::instance::WAIT_FOR_PID_ARG)
+            .arg(pid)
+            .spawn();
+        launched.map_err(|e| format!("Atualizado, mas não foi possível reabrir o Boladão: {e}"))?;
     }
     Ok(true)
 }
 
 /// Verifies `update_file` (again: it sat on disk since the download) and puts it in place of
-/// `target`, keeping the replaced binary as `<target>.old`. Rolls back if the copy fails.
+/// `target`, keeping the replaced version as `<target>.old`. Rolls back if the copy fails.
 fn install_over(target: &Path, update_file: &Path, signature: &str) -> Result<(), String> {
     let data = fs::read(update_file).map_err(|e| e.to_string())?;
     verify_signature(&data, signature)?;
-    drop(data);
 
-    let old = target.with_extension("exe.old");
-    let _ = fs::remove_file(&old);
-    fs::rename(target, &old).map_err(|e| format!("Não foi possível trocar o executável: {e}"))?;
-    if let Err(e) = copy_clean_executable(update_file, target) {
-        let _ = fs::rename(&old, target);
-        return Err(e);
+    #[cfg(target_os = "macos")]
+    {
+        // The `.app` comes packed: unpack it next to the old one (same disk, so the swap is a rename).
+        let parent = target.parent().ok_or("pasta do aplicativo desconhecida")?;
+        let staging = parent.join(".boladao-update");
+        let _ = fs::remove_dir_all(&staging);
+        fs::create_dir_all(&staging).map_err(|e| format!("Não foi possível preparar a atualização: {e}"))?;
+        let unpacked = tar::Archive::new(flate2::read::GzDecoder::new(data.as_slice())).unpack(&staging);
+        drop(data);
+        let new_app = unpacked.ok().and_then(|_| {
+            fs::read_dir(&staging)
+                .ok()?
+                .flatten()
+                .map(|e| e.path())
+                .find(|p| p.extension().is_some_and(|e| e == "app"))
+        });
+        let Some(new_app) = new_app else {
+            let _ = fs::remove_dir_all(&staging);
+            return Err("O pacote da atualização não tem o aplicativo.".to_string());
+        };
+        let old = old_path(target);
+        let _ = fs::remove_dir_all(&old);
+        fs::rename(target, &old).map_err(|e| format!("Não foi possível trocar o aplicativo: {e}"))?;
+        if let Err(e) = fs::rename(&new_app, target) {
+            let _ = fs::rename(&old, target);
+            let _ = fs::remove_dir_all(&staging);
+            return Err(format!("Não foi possível trocar o aplicativo: {e}"));
+        }
+        let _ = fs::remove_dir_all(&staging);
+        Ok(())
     }
-    Ok(())
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        drop(data);
+        let old = old_path(target);
+        let _ = fs::remove_file(&old);
+        fs::rename(target, &old).map_err(|e| format!("Não foi possível trocar o executável: {e}"))?;
+        if let Err(e) = put_in_place(update_file, target) {
+            let _ = fs::rename(&old, target);
+            return Err(e);
+        }
+        Ok(())
+    }
 }
 
-/// Removes the previous executable left behind by an update.
+/// Copies the downloaded executable to its place: without the installer mark on Windows, with the
+/// executable bit on Linux.
+#[cfg(not(target_os = "macos"))]
+fn put_in_place(update_file: &Path, target: &Path) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        copy_clean_executable(update_file, target)
+    }
+    #[cfg(not(windows))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::copy(update_file, target).map_err(|e| format!("Não foi possível trocar o executável: {e}"))?;
+        fs::set_permissions(target, fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())
+    }
+}
+
+/// Removes the previous version left behind by an update.
 pub fn cleanup_previous_binary() {
-    if let Ok(current) = std::env::current_exe() {
-        let _ = fs::remove_file(current.with_extension("exe.old"));
+    if let Some(target) = install_target() {
+        let old = old_path(&target);
+        if old.is_dir() {
+            let _ = fs::remove_dir_all(&old);
+        } else {
+            let _ = fs::remove_file(&old);
+        }
     }
 }
 
@@ -244,12 +368,13 @@ mod tests {
         assert!(verify_signature(b"teste\n", "nao-e-base64").is_err());
     }
 
+    #[cfg(not(target_os = "macos"))]
     #[test]
     fn swaps_the_executable_only_for_a_signed_update() {
         let signed = "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVSSFlNWDBiajhBNUZ3RnJyN2ZMdVk3UmlWMVVld1BtVVJNR2tSSTlFYlVqVktabzVxeEdQMHpzTTk0SW5LWm1IVC9aUVJZSkFPSTJkdTY1MXhMS2poOElWdXN2RkpKWXd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzk1MzQ1MDIzCWZpbGU6c2lndGVzdC5iaW4KWWdkQ0xaN2oyNjRrNlBjTTA5RFBwSDBmbkUraEtsbEZRaG8rb2lsa2N2U1NQUDdKOTJRZ04ya3NSb3ZPZld4TElxYlRLR1FNcVU0bzhaU0dNdFF6Qnc9PQo=";
         let dir = tempfile::tempdir().unwrap();
-        let target = dir.path().join("Boladão.exe");
-        let update = dir.path().join("Boladao-9.9.9.exe");
+        let target = dir.path().join(if cfg!(windows) { "Boladão.exe" } else { "Boladão.AppImage" });
+        let update = dir.path().join(format!("Boladao-9.9.9.{PACKAGE_EXT}"));
 
         // Tampered download: nothing changes.
         fs::write(&target, b"versao antiga").unwrap();
@@ -257,10 +382,27 @@ mod tests {
         assert!(install_over(&target, &update, signed).is_err());
         assert_eq!(fs::read(&target).unwrap(), b"versao antiga");
 
-        // Signed download: the new binary takes the place, the old one is kept as `.exe.old`.
+        // Signed download: the new binary takes the place, the old one is kept as `.old`.
         fs::write(&update, b"teste\n").unwrap();
         install_over(&target, &update, signed).unwrap();
         assert_eq!(fs::read(&target).unwrap(), b"teste\n");
-        assert_eq!(fs::read(target.with_extension("exe.old")).unwrap(), b"versao antiga");
+        assert_eq!(fs::read(old_path(&target)).unwrap(), b"versao antiga");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(fs::metadata(&target).unwrap().permissions().mode() & 0o111, 0o111);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn keeps_the_app_when_the_package_is_not_signed() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = dir.path().join("Boladão.app");
+        fs::create_dir_all(app.join("Contents")).unwrap();
+        let update = dir.path().join("Boladao-9.9.9.app.tar.gz");
+        fs::write(&update, b"pacote adulterado").unwrap();
+        assert!(install_over(&app, &update, "nao-e-base64").is_err());
+        assert!(app.join("Contents").is_dir());
     }
 }

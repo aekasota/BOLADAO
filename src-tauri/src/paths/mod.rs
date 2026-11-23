@@ -8,6 +8,12 @@ pub const APP_NAME: &str = "Boladão";
 pub const APP_SLUG: &str = "Boladao";
 pub const TEMP_SUBDIR_NAME: &str = ".boladao-tmp";
 
+/// Name of the app's own folders: `Boladao` on Windows and macOS, `boladao` on Linux (XDG habit).
+#[cfg(target_os = "linux")]
+const DATA_DIR_NAME: &str = "boladao";
+#[cfg(not(target_os = "linux"))]
+const DATA_DIR_NAME: &str = APP_SLUG;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CollisionPolicy {
@@ -79,26 +85,54 @@ impl Default for PathPreviewSample {
     }
 }
 
-/// `%APPDATA%\Boladao` — settings.json and boladao.db
+/// settings.json and boladao.db: `%APPDATA%\Boladao`, `~/Library/Application Support/Boladao`
+/// on macOS, `~/.config/boladao` on Linux.
 pub fn app_config_dir() -> PathBuf {
+    #[cfg(windows)]
     let base = env::var_os("APPDATA")
         .map(PathBuf::from)
         .or_else(|| env::var_os("USERPROFILE").map(|p| PathBuf::from(p).join("AppData").join("Roaming")))
         .unwrap_or_else(|| PathBuf::from("."));
-    let dir = base.join(APP_SLUG);
+    #[cfg(not(windows))]
+    let base = dirs::config_dir().unwrap_or_else(|| user_home().join(".config"));
+    let dir = base.join(DATA_DIR_NAME);
     let _ = fs::create_dir_all(&dir);
     dir
 }
 
-/// `%LOCALAPPDATA%\Boladao` — extracted binaries, cookies, Whisper models, media cache
+/// Extracted engines, cookies, Whisper models and the media cache: `%LOCALAPPDATA%\Boladao`,
+/// `~/Library/Application Support/Boladao` on macOS, `~/.local/share/boladao` on Linux.
 pub fn app_local_dir() -> PathBuf {
+    #[cfg(windows)]
     let base = env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .or_else(|| env::var_os("USERPROFILE").map(|p| PathBuf::from(p).join("AppData").join("Local")))
         .unwrap_or_else(|| PathBuf::from("."));
-    let dir = base.join(APP_SLUG);
+    #[cfg(not(windows))]
+    let base = dirs::data_local_dir().unwrap_or_else(|| user_home().join(".local").join("share"));
+    let dir = base.join(DATA_DIR_NAME);
     let _ = fs::create_dir_all(&dir);
     dir
+}
+
+/// The user's home folder.
+pub fn user_home() -> PathBuf {
+    #[cfg(windows)]
+    let home = env::var_os("USERPROFILE").map(PathBuf::from);
+    #[cfg(not(windows))]
+    let home = dirs::home_dir();
+    home.unwrap_or_else(|| PathBuf::from("."))
+}
+
+/// Address of a file served by the app's own media protocol (thumbnails, waveforms,
+/// spectrograms). WebView2 reaches custom protocols through `http://<name>.localhost`; WebKit on
+/// Linux and macOS uses the scheme itself.
+pub fn local_media_url(kind: &str, file_name: &str) -> String {
+    #[cfg(windows)]
+    let origin = "http://boladaomedia.localhost";
+    #[cfg(not(windows))]
+    let origin = "boladaomedia://localhost";
+    format!("{origin}/{kind}/{file_name}")
 }
 
 #[cfg(windows)]
@@ -125,6 +159,7 @@ fn known_folder_path(rfid: &windows_sys::core::GUID) -> Option<PathBuf> {
     }
 }
 
+/// The system's Music folder (localized on Linux, through the XDG user folders) plus `Boladão`.
 pub fn default_music_root() -> PathBuf {
     #[cfg(windows)]
     {
@@ -133,13 +168,14 @@ pub fn default_music_root() -> PathBuf {
             return music.join(APP_NAME);
         }
     }
-    env::var_os("USERPROFILE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Music")
-        .join(APP_NAME)
+    #[cfg(not(windows))]
+    if let Some(music) = dirs::audio_dir() {
+        return music.join(APP_NAME);
+    }
+    user_home().join("Music").join(APP_NAME)
 }
 
+/// The system's Videos folder (Movies on macOS) plus `Boladão`.
 pub fn default_video_root() -> PathBuf {
     #[cfg(windows)]
     {
@@ -148,11 +184,12 @@ pub fn default_video_root() -> PathBuf {
             return videos.join(APP_NAME);
         }
     }
-    env::var_os("USERPROFILE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Videos")
-        .join(APP_NAME)
+    #[cfg(not(windows))]
+    if let Some(videos) = dirs::video_dir() {
+        return videos.join(APP_NAME);
+    }
+    let folder = if cfg!(target_os = "macos") { "Movies" } else { "Videos" };
+    user_home().join(folder).join(APP_NAME)
 }
 
 pub fn desktop_dir() -> PathBuf {
@@ -163,10 +200,11 @@ pub fn desktop_dir() -> PathBuf {
             return desktop;
         }
     }
-    env::var_os("USERPROFILE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Desktop")
+    #[cfg(not(windows))]
+    if let Some(desktop) = dirs::desktop_dir() {
+        return desktop;
+    }
+    user_home().join("Desktop")
 }
 
 pub fn start_menu_programs_dir() -> PathBuf {
@@ -242,7 +280,8 @@ pub fn detect_legacy_yt2_music_folder() -> Option<(PathBuf, PathBuf)> {
     None
 }
 
-/// Queries available free bytes on the volume containing `target_dir` via `GetDiskFreeSpaceExW`.
+/// Free bytes the user can write on the volume holding `target_dir` (`GetDiskFreeSpaceExW` on
+/// Windows, `statvfs` elsewhere).
 pub fn free_disk_bytes(target_dir: &Path) -> Option<u64> {
     // Walk up until we find an existing ancestor or drive root
     let mut probe = target_dir.to_path_buf();
@@ -285,10 +324,18 @@ pub fn free_disk_bytes(target_dir: &Path) -> Option<u64> {
         None
     }
 
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     {
-        let _ = probe;
-        None
+        use std::os::unix::ffi::OsStrExt;
+        let path = std::ffi::CString::new(probe.as_os_str().as_bytes()).ok()?;
+        let mut stats = std::mem::MaybeUninit::<libc::statvfs>::uninit();
+        // SAFETY: `path` is a valid C string and `statvfs` fills `stats` when it returns 0.
+        if unsafe { libc::statvfs(path.as_ptr(), stats.as_mut_ptr()) } != 0 {
+            return None;
+        }
+        // SAFETY: initialized by the successful call above.
+        let stats = unsafe { stats.assume_init() };
+        (stats.f_bavail as u64).checked_mul(stats.f_frsize as u64)
     }
 }
 
@@ -378,9 +425,10 @@ const TOKEN_ALIASES: &[(&str, &str)] = &[
     ("{month}", "{mes}"),
 ];
 
-/// Normalizes separators and rewrites English and Spanish tokens to the canonical ones.
+/// Normalizes separators (`\` and `/` both become the system's own) and rewrites English and
+/// Spanish tokens to the canonical ones.
 pub fn canonical_template(template: &str) -> String {
-    let mut out = template.replace('/', "\\");
+    let mut out = template.replace(['/', '\\'], std::path::MAIN_SEPARATOR_STR);
     for (alias, canonical) in TOKEN_ALIASES {
         out = out.replace(alias, canonical);
     }
@@ -429,7 +477,7 @@ pub fn compile_ytdlp_output_template(template: &str) -> String {
         out = out.replace(token, ytdlp_expr);
     }
     // Strip leading slashes so `--paths home:<root>` stays authoritative
-    let out = out.trim_start_matches('\\').to_string();
+    let out = out.trim_start_matches(std::path::MAIN_SEPARATOR).to_string();
     if out.ends_with(".%(ext)s") {
         out
     } else {
@@ -438,7 +486,12 @@ pub fn compile_ytdlp_output_template(template: &str) -> String {
 }
 
 /// Computes a safe `--trim-filenames` value considering root path depth and Windows MAX_PATH (259 chars).
+/// Linux and macOS have no such path limit, but each name holds 255 bytes: 80 characters fit
+/// even when every one takes 3 bytes (Japanese, Chinese, Korean).
 pub fn compute_safe_trim_length(root_dir: &Path, template: &str) -> usize {
+    if cfg!(not(windows)) {
+        return 80;
+    }
     let root_len = root_dir.to_string_lossy().chars().count();
     let depth = template.matches('\\').count().saturating_add(template.matches('/').count());
     // Leave comfortable headroom inside classic 259-char Win32 limit for `.part` / `.ytdl` / `(2)` suffixes
@@ -482,7 +535,7 @@ pub fn preview_output_path(root_dir: &Path, template: &str, sample: &PathPreview
     let trim_limit = compute_safe_trim_length(root_dir, template);
     let mut final_path = root_dir.to_path_buf();
     let segments: Vec<&str> = rendered
-        .split('\\')
+        .split(std::path::MAIN_SEPARATOR)
         .filter(|s| !s.trim().is_empty())
         .collect();
 
@@ -518,28 +571,99 @@ impl PathPreviewSample {
     }
 }
 
-/// Resolves filename collisions when `CollisionPolicy::KeepBoth` is active: `song.mp3` -> `song (2).mp3`.
-pub fn next_available_collision_path(desired: &Path) -> PathBuf {
-    if !desired.exists() {
-        return desired.to_path_buf();
-    }
-    let parent = desired.parent().unwrap_or_else(|| Path::new("."));
-    let stem = desired
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "arquivo".to_string());
-    let ext = desired
-        .extension()
-        .map(|e| format!(".{}", e.to_string_lossy()))
-        .unwrap_or_default();
+/// Moves every file a "Keep both" job left in its own folder into `root`, keeping the
+/// subfolders, and returns each file's old and new path. When any of them would land on an
+/// existing file, the whole set takes the first free ` (n)`, so a video and its subtitles keep
+/// matching names (`clip (2).mp4`, `clip (2).pt.srt`).
+pub fn deliver_keeping_both(
+    staging: &Path,
+    root: &Path,
+    primary_stem: &str,
+) -> std::io::Result<Vec<(PathBuf, PathBuf)>> {
+    let mut staged = Vec::new();
+    collect_files(staging, &mut staged)?;
+    let targets: Vec<(PathBuf, PathBuf)> = staged
+        .into_iter()
+        .filter_map(|from| {
+            let to = root.join(from.strip_prefix(staging).ok()?);
+            Some((from, to))
+        })
+        .collect();
 
-    for n in 2..=9999 {
-        let candidate = parent.join(format!("{stem} ({n}){ext}"));
-        if !candidate.exists() {
-            return candidate;
+    let number = if targets.iter().any(|(_, to)| to.exists()) {
+        let taken = |n: u32| {
+            targets
+                .iter()
+                .any(|(_, to)| numbered(to, n, primary_stem).exists())
+        };
+        let mut n = 2;
+        while taken(n) {
+            n += 1;
+        }
+        Some(n)
+    } else {
+        None
+    };
+
+    let mut moved = Vec::with_capacity(targets.len());
+    for (from, to) in targets {
+        let to = match number {
+            Some(n) => numbered(&to, n, primary_stem),
+            None => to,
+        };
+        if let Some(parent) = to.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::rename(&from, &to)?;
+        moved.push((from, to));
+    }
+    let _ = fs::remove_dir_all(staging);
+    Ok(moved)
+}
+
+/// `clip.pt.srt` -> `clip (2).pt.srt` for files named after the main one (`clip`); any other file
+/// takes the number before its extension (`01 - Intro.mp4` -> `01 - Intro (2).mp4`).
+fn numbered(path: &Path, n: u32, primary_stem: &str) -> PathBuf {
+    let name = path
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let renamed = match name.strip_prefix(primary_stem) {
+        Some(rest) if !primary_stem.is_empty() && (rest.is_empty() || rest.starts_with('.')) => {
+            format!("{primary_stem} ({n}){rest}")
+        }
+        _ => match name.rsplit_once('.') {
+            Some((stem, ext)) if !stem.is_empty() => format!("{stem} ({n}).{ext}"),
+            _ => format!("{name} ({n})"),
+        },
+    };
+    path.with_file_name(renamed)
+}
+
+fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    for entry in entries {
+        let path = entry?.path();
+        if path.is_dir() {
+            collect_files(&path, out)?;
+        } else {
+            out.push(path);
         }
     }
-    parent.join(format!("{stem} ({}){ext}", uuid::Uuid::new_v4().simple()))
+    Ok(())
+}
+
+/// Whether `path` was created before `moment` (false when it is missing or the disk keeps no
+/// creation time).
+pub fn created_before(path: &Path, moment: std::time::SystemTime) -> bool {
+    fs::metadata(path)
+        .and_then(|m| m.created())
+        .map(|created| created < moment)
+        .unwrap_or(false)
 }
 
 /// Cleans leftover `.boladao-tmp` folders inside configured library roots at startup (only when no active jobs own them).
@@ -554,7 +678,28 @@ pub fn cleanup_stale_temp_dirs(roots: &[PathBuf]) {
     }
 }
 
-/// Opens a file with the default OS handler (`ShellExecute` / `explorer`).
+/// Program that opens files and links with the user's default app: `open` on macOS,
+/// `xdg-open` on Linux.
+#[cfg(unix)]
+const OPENER: &str = if cfg!(target_os = "macos") { "/usr/bin/open" } else { "xdg-open" };
+
+/// Starts `program` without waiting for it; a thread reaps it so it never lingers as a zombie.
+#[cfg(unix)]
+fn spawn_detached(program: &str, args: &[&std::ffi::OsStr]) -> std::io::Result<()> {
+    use std::process::Stdio;
+    let mut child = std::process::Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
+/// Opens a file with the default OS handler (`ShellExecute`, `open`, `xdg-open`).
 pub fn open_file_default(path: &Path) -> Result<(), String> {
     if !path.exists() {
         return Err(tr!("Arquivo não encontrado no disco.", "File not found on disk.", "Archivo no encontrado en el disco."));
@@ -570,9 +715,12 @@ pub fn open_file_default(path: &Path) -> Result<(), String> {
             .map_err(|e| tr!("Falha ao abrir arquivo: {e}", "Couldn't open the file: {e}", "No se pudo abrir el archivo: {e}"))?;
         Ok(())
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     {
-        Err("Apenas Windows suportado.".to_string())
+        // An absolute path starts with `/`, so `open` and `xdg-open` never take it for an option.
+        std::path::absolute(path)
+            .and_then(|path| spawn_detached(OPENER, &[path.as_os_str()]))
+            .map_err(|e| tr!("Falha ao abrir arquivo: {e}", "Couldn't open the file: {e}", "No se pudo abrir el archivo: {e}"))
     }
 }
 
@@ -592,13 +740,16 @@ pub fn open_url_default(url: &str) -> Result<(), String> {
             .map_err(|e| tr!("Falha ao abrir o navegador: {e}", "Couldn't open the browser: {e}", "No se pudo abrir el navegador: {e}"))?;
         Ok(())
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     {
-        Err("Apenas Windows suportado.".to_string())
+        spawn_detached(OPENER, &[std::ffi::OsStr::new(url)])
+            .map_err(|e| tr!("Falha ao abrir o navegador: {e}", "Couldn't open the browser: {e}", "No se pudo abrir el navegador: {e}"))
     }
 }
 
-/// Opens Windows Explorer with the target file selected (`explorer.exe /select,<path>`).
+/// Shows the file selected in the system's file manager: `explorer.exe /select,<path>` on
+/// Windows, Finder (`open -R`) on macOS, and on Linux the file manager's `ShowItems` (GNOME
+/// Files, Dolphin, Nemo...), falling back to opening the folder.
 pub fn reveal_in_explorer(path: &Path) -> Result<(), String> {
     #[cfg(windows)]
     {
@@ -622,10 +773,51 @@ pub fn reveal_in_explorer(path: &Path) -> Result<(), String> {
         }
         Ok(())
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     {
-        let _ = path;
-        Err("Apenas Windows suportado.".to_string())
+        let fail = |e: std::io::Error| {
+            tr!("Falha ao abrir pasta: {e}", "Couldn't open the folder: {e}", "No se pudo abrir la carpeta: {e}")
+        };
+        // An absolute path starts with `/`, so `open` and `xdg-open` never take it for an option.
+        let absolute = std::path::absolute(path).map_err(&fail)?;
+        let path = absolute.as_path();
+        if !path.exists() {
+            let parent = path.parent().filter(|p| p.exists()).ok_or_else(|| {
+                tr!("Pasta ou arquivo não encontrado.", "Folder or file not found.", "Carpeta o archivo no encontrado.")
+            })?;
+            return spawn_detached(OPENER, &[parent.as_os_str()]).map_err(fail);
+        }
+        if path.is_dir() {
+            return spawn_detached(OPENER, &[path.as_os_str()]).map_err(fail);
+        }
+        #[cfg(target_os = "macos")]
+        {
+            spawn_detached(OPENER, &[std::ffi::OsStr::new("-R"), path.as_os_str()]).map_err(fail)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let shown = url::Url::from_file_path(path).ok().is_some_and(|uri| {
+                std::process::Command::new("dbus-send")
+                    .args([
+                        "--session",
+                        "--print-reply",
+                        "--dest=org.freedesktop.FileManager1",
+                        "--type=method_call",
+                        "/org/freedesktop/FileManager1",
+                        "org.freedesktop.FileManager1.ShowItems",
+                    ])
+                    // dbus-send splits array items on commas.
+                    .arg(format!("array:string:{}", uri.as_str().replace(',', "%2C")))
+                    .arg("string:")
+                    .output()
+                    .is_ok_and(|out| out.status.success())
+            });
+            if shown {
+                return Ok(());
+            }
+            let folder = path.parent().unwrap_or(path);
+            spawn_detached(OPENER, &[folder.as_os_str()]).map_err(fail)
+        }
     }
 }
 
@@ -647,19 +839,39 @@ mod tests {
 
     #[test]
     fn compiles_templates_to_ytdlp_output_spec() {
+        // Templates written with either slash compile with the system's own separator.
+        let sep = std::path::MAIN_SEPARATOR_STR;
         let audio = compile_ytdlp_output_template("{artista}\\{album}\\{faixa}");
         assert_eq!(
             audio,
             "%(artist,creator,uploader,channel|Artista)s\\%(album,playlist_title|Singles)s\\%(track,title|Faixa)s.%(ext)s"
+                .replace('\\', sep)
         );
 
         let video = compile_ytdlp_output_template("{plataforma}/{canal}/{titulo} [{id}]");
         assert_eq!(
             video,
             "%(extractor_key|Web)s\\%(channel,uploader,creator,artist|Canal)s\\%(title| Sem título)s [%(id)s].%(ext)s"
+                .replace('\\', sep)
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn previews_keep_every_name_within_255_bytes() {
+        let sample = PathPreviewSample {
+            title: "長".repeat(200),
+            creator: "CON".to_string(),
+            ext: "mp4".to_string(),
+            ..Default::default()
+        };
+        let preview = preview_output_path(Path::new("/home/ana/Vídeos/Boladão"), "{canal}\\{titulo}", &sample);
+        assert_eq!(preview.parent().unwrap().file_name().unwrap(), "_CON");
+        let name = preview.file_name().unwrap().to_string_lossy();
+        assert!(name.len() <= 255, "nome com {} bytes", name.len());
+    }
+
+    #[cfg(windows)]
     #[test]
     fn previews_and_trims_deep_windows_paths() {
         let deep_root = PathBuf::from(
@@ -679,5 +891,62 @@ mod tests {
             "Path exceeded MAX_PATH: len={}",
             full.chars().count()
         );
+    }
+
+    #[test]
+    fn keep_both_numbers_the_whole_new_download_and_leaves_the_old_files_alone() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Música");
+        let staging = root.join(TEMP_SUBDIR_NAME).join("1a2b3c4d");
+        let dir = root.join("Artista");
+        let staged_dir = staging.join("Artista");
+        fs::create_dir_all(&dir).unwrap();
+        fs::create_dir_all(&staged_dir).unwrap();
+        fs::write(dir.join("Faixa.mp3"), "old").unwrap();
+        // An older second copy left its subtitles, so " (2)" is taken for this set.
+        fs::write(dir.join("Faixa (2).pt.srt"), "old subs").unwrap();
+        fs::write(staged_dir.join("Faixa.mp3"), "new").unwrap();
+        fs::write(staged_dir.join("Faixa.pt.srt"), "new subs").unwrap();
+
+        let moved = deliver_keeping_both(&staging, &root, "Faixa").unwrap();
+
+        assert_eq!(fs::read_to_string(dir.join("Faixa.mp3")).unwrap(), "old");
+        assert_eq!(fs::read_to_string(dir.join("Faixa (2).pt.srt")).unwrap(), "old subs");
+        assert_eq!(fs::read_to_string(dir.join("Faixa (3).mp3")).unwrap(), "new");
+        // The subtitles take the same number, so players still pair them with the audio.
+        assert_eq!(fs::read_to_string(dir.join("Faixa (3).pt.srt")).unwrap(), "new subs");
+        assert!(moved.contains(&(staged_dir.join("Faixa.mp3"), dir.join("Faixa (3).mp3"))));
+        assert!(!staging.exists());
+    }
+
+    #[test]
+    fn keep_both_keeps_the_names_when_nothing_is_in_the_way() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().to_path_buf();
+        let staging = root.join(TEMP_SUBDIR_NAME).join("1a2b3c4d");
+        fs::create_dir_all(&staging).unwrap();
+        fs::write(staging.join("clip.mp4"), "video").unwrap();
+        fs::write(staging.join("01 - Intro.mp4"), "chapter").unwrap();
+        fs::write(root.join("clip (2).mp4"), "unrelated").unwrap();
+
+        let moved = deliver_keeping_both(&staging, &root, "clip").unwrap();
+
+        assert_eq!(moved.len(), 2);
+        assert_eq!(fs::read_to_string(root.join("clip.mp4")).unwrap(), "video");
+        assert_eq!(fs::read_to_string(root.join("01 - Intro.mp4")).unwrap(), "chapter");
+        assert_eq!(fs::read_to_string(root.join("clip (2).mp4")).unwrap(), "unrelated");
+    }
+
+    #[test]
+    fn tells_files_created_before_a_moment() {
+        use std::time::{Duration, SystemTime};
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("a.mp3");
+        fs::write(&file, "x").unwrap();
+        let now = SystemTime::now();
+
+        assert!(created_before(&file, now + Duration::from_secs(60)));
+        assert!(!created_before(&file, now - Duration::from_secs(3600)));
+        assert!(!created_before(&tmp.path().join("missing.mp3"), now + Duration::from_secs(60)));
     }
 }

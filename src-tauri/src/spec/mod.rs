@@ -170,7 +170,8 @@ impl WorkshopSpec {
     pub fn has_any_step(&self, mode: MediaMode, audio_format: AudioFormat) -> bool {
         (mode == MediaMode::Audio && audio_format.uses_workshop_conversion())
             || self.loudnorm_lufs.is_some()
-            || self.trim_silence
+            // Silence is trimmed only from audio downloads (see `workshop::audio_filter_chain`).
+            || (mode == MediaMode::Audio && self.trim_silence)
             || self.fade_in_s.filter(|&v| v > 0.0).is_some()
             || self.fade_out_s.filter(|&v| v > 0.0).is_some()
             || self.speed_factor.filter(|&v| (v - 1.0).abs() > 0.01).is_some()

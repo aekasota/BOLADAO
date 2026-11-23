@@ -4,12 +4,12 @@
 
 # BOLADÃO
 
-**Downloader de vídeo e áudio para Windows, com yt-dlp, Deno e FFmpeg embutidos em um único executável.**
+**Downloader de vídeo e áudio para Windows, Linux e macOS, com yt-dlp, Deno e FFmpeg embutidos no próprio app.**
 
 Mais de 1.600 sites, fila persistente, Oficina FFmpeg, Modo Jogo e um fundo Op-Art em WebGL2 que reage ao cursor e à velocidade da rede.
 
 <p>
-  <a href="https://github.com/aekasota/BOLADAO/releases/latest"><img src="https://img.shields.io/badge/Baixar-Windows%2010%20%2F%2011%20x64-FA023E?style=for-the-badge&labelColor=161616" alt="Baixar para Windows 10 e 11 (x64)" /></a>
+  <a href="https://github.com/aekasota/BOLADAO/releases/latest"><img src="https://img.shields.io/badge/Baixar-Windows%20%C2%B7%20Linux%20%C2%B7%20macOS-FA023E?style=for-the-badge&labelColor=161616" alt="Baixar para Windows, Linux e macOS" /></a>
 </p>
 
 <p>
@@ -46,17 +46,17 @@ Mais de 1.600 sites, fila persistente, Oficina FFmpeg, Modo Jogo e um fundo Op-A
 
 ## Por que o Boladão
 
-Baixar vídeo no Windows costuma ter duas saídas ruins: um site cheio de anúncios e pop-ups ou uma tarde configurando Python, `PATH`, `ffmpeg` e flags do yt-dlp no terminal.
+Baixar vídeo no computador costuma ter duas saídas ruins: um site cheio de anúncios e pop-ups ou uma tarde configurando Python, `PATH`, `ffmpeg` e flags do yt-dlp no terminal.
 
 O Boladão junta yt-dlp, FFmpeg e Deno em um aplicativo nativo. Você instala, cola um link e escolhe o formato. Tudo roda no seu computador, sem conta, sem anúncio e sem telemetria.
 
-- **Nada para configurar.** yt-dlp `2026.10.26`, Deno `2.9.8` e FFmpeg `9.0.2` vêm comprimidos dentro do executável e são extraídos na primeira abertura. O próprio Boladão se atualiza sozinho, com a assinatura de cada versão conferida.
+- **Nada para configurar.** yt-dlp `2026.10.26`, Deno `2.9.8` e FFmpeg vêm comprimidos dentro do app e são extraídos na primeira abertura. O próprio Boladão se atualiza sozinho, com a assinatura de cada versão conferida.
 - **Download que não atrapalha o jogo.** Um limitador de banda único vale para todos os downloads ao mesmo tempo, inclusive HLS e DASH, e o Modo Jogo entra sozinho quando um jogo ocupa a tela.
 - **Oficina FFmpeg.** Normaliza o volume em LUFS, converte para WAV 24-bit, comprime vídeo para caber no Discord ou no WhatsApp, gera GIF e transcreve áudio no próprio PC.
 - **Fila persistente.** Fica salva em SQLite, tenta de novo quando a rede oscila e, se o app fechar no meio, continua cada download de onde parou.
 - **Biblioteca com análise técnica.** `ffprobe`, loudness, forma de onda e um espectrograma que acusa quando a fonte já tinha perdas.
 - **Transparente.** Avisa sobre DRM antes de tentar, explica cada erro com a ação para resolver e mostra o comando `yt-dlp` equivalente de cada download.
-- **Em três idiomas.** Português, inglês e espanhol, escolhido pelo idioma do Windows e trocável no botão de idioma da barra de status. O inglês e o espanhol são neutros, para soar natural em qualquer país.
+- **Em três idiomas.** Português, inglês e espanhol, escolhido pelo idioma do sistema e trocável no botão de idioma da barra de status. O inglês e o espanhol são neutros, para soar natural em qualquer país.
 
 <br />
 
@@ -118,7 +118,7 @@ Tudo isso custa pouco:
 - desenha um único triângulo de tela cheia, sem buffer de vértices, com densidade de pixels limitada a 1,5×;
 - se a média de 60 quadros passa de 12 ms, a resolução interna cai para 85% e, se ainda for preciso, para 70%;
 - depois de 30 s sem foco, roda a 15 fps; com a janela minimizada, não desenha nada;
-- com *Reduzir movimento*, com o Modo Jogo ativo ou com os efeitos de animação desligados no Windows, desenha um quadro estático e para (0% de GPU).
+- com *Reduzir movimento*, com o Modo Jogo ativo ou com os efeitos de animação desligados no sistema, desenha um quadro estático e para (0% de GPU).
 
 Em *Ajustes → Aparência* dá para trocar o tema e ajustar a intensidade do fundo (10% a 100%) e a densidade das faixas (0,70× a 1,40×).
 
@@ -129,7 +129,7 @@ O retângulo ao lado do nome, no canto superior esquerdo, é um recorte de 24 ×
 ### Notch, tipografia e movimento
 
 - **Notch.** As abas ficam num notch que desce da borda superior da janela, com ombros côncavos de 14 px desenhados em SVG. A aba ativa é uma pílula que desliza entre as outras com uma mola (rigidez 420, amortecimento 34).
-- **Janela própria.** Sem a moldura do Windows: o cabeçalho arrasta a janela, o clique duplo maximiza e os controles ficam em uma pílula à direita.
+- **Janela própria.** Sem a moldura do sistema: o cabeçalho arrasta a janela, o clique duplo maximiza e os controles ficam em uma pílula à direita. No macOS, os botões nativos da janela ficam à esquerda, como em todo app do Mac, e a pílula da marca abre espaço para eles.
 - **Tipografia.** Archivo variável (largura de 62% a 125%, peso de 100 a 900) no texto. Títulos e abas usam a largura máxima, peso 860 e caixa alta. Velocidades, tamanhos, tempos, caminhos e versões usam JetBrains Mono com algarismos tabulares, para que os números não tremam enquanto mudam. As duas fontes vão embutidas no app.
 - **Progresso em listras.** As barras são listras diagonais nas cores do tema e correm mais rápido quanto maior a velocidade do download. Na pausa, elas param e ficam cinza; com erro, ficam âmbar; ao concluir, verdes. O carregamento e o seletor de temas usam as mesmas listras.
 - **Barra de status.** Sempre visível: velocidade total com o gráfico dos últimos 60 s, itens ativos e na fila e, à direita, dois botões. Um troca o idioma; o outro abre o limite de banda ao vivo e mostra o espaço livre no disco de destino. Um ponto no ícone avisa que há um limite ligado, e o botão fica na cor do tema enquanto o Modo Jogo segura os downloads.
@@ -137,7 +137,7 @@ O retângulo ao lado do nome, no canto superior esquerdo, é um recorte de 24 ×
 
 ### Texto
 
-A interface nasceu em português do Brasil, com frases curtas e sem jargão, e fala também inglês e espanhol neutros. O idioma segue o do Windows (números e datas seguem o formato regional) e pode ser fixado no botão de idioma da barra de status; a troca vale na hora, inclusive no menu da bandeja e nas notificações. Quando o yt-dlp falha, o app traduz o erro e oferece uma saída:
+A interface nasceu em português do Brasil, com frases curtas e sem jargão, e fala também inglês e espanhol neutros. O idioma segue o do sistema (números e datas seguem o formato regional) e pode ser fixado no botão de idioma da barra de status; a troca vale na hora, inclusive no menu da bandeja e nas notificações. Quando o yt-dlp falha, o app traduz o erro e oferece uma saída:
 
 | O yt-dlp responde | O Boladão mostra | E oferece |
 |---|---|---|
@@ -283,7 +283,7 @@ Todo download concluído entra na Biblioteca, com busca por título, canal, arti
 - **Motores à vista:** versões instaladas, encoders de GPU validados, filtros do FFmpeg detectados e busca entre os extratores do yt-dlp (1.629 na versão `2026.10.26`).
 - **Atualização do yt-dlp:** uma vez por semana o app consulta o GitHub em silêncio e avisa quando sai versão nova, no canal *Stable* ou *Nightly*. A atualização baixa `yt-dlp_win.zip`, confere o hash em `SHA2-256SUMS`, troca a versão de forma atômica e guarda a anterior para voltar com um clique.
 - **Diagnóstico:** *Testar motores* roda `yt-dlp -v` e mostra se yt-dlp, Deno e FFmpeg estão se entendendo.
-- **Contas:** para conteúdo privado, restrito por idade ou Stories, o login acontece numa janela WebView2 isolada, com perfil próprio e nenhuma permissão de IPC, para Instagram, TikTok, X, Facebook, Twitch e Vimeo. No YouTube, a recomendação é usar os cookies do Firefox ou importar um `cookies.txt` (formato Netscape); a janela embutida também está disponível. Os cookies salvos ficam criptografados pela DPAPI do Windows, presos à sua conta de usuário, e só viram texto num arquivo temporário enquanto o yt-dlp roda.
+- **Contas:** para conteúdo privado, restrito por idade ou Stories, o login acontece numa janela isolada (WebView2 no Windows, WebKit no Linux e no macOS), com perfil próprio e nenhuma permissão de IPC, para Instagram, TikTok, X, Facebook, Twitch e Vimeo. No YouTube, a recomendação é usar os cookies do Firefox ou importar um `cookies.txt` (formato Netscape); a janela embutida também está disponível. Os cookies salvos ficam criptografados pela DPAPI no Windows, no Keychain no macOS e no chaveiro do sistema no Linux (GNOME Keyring ou KWallet), e só viram texto num arquivo temporário enquanto o yt-dlp roda.
 
 <br />
 
@@ -295,7 +295,7 @@ Do link colado ao arquivo na pasta:
 2. **Sondagem.** `yt-dlp -J --flat-playlist` traz metadados, formatos e itens de playlist. O resultado fica 10 minutos em cache; a capa é salva em disco e chega à interface pelo protocolo local `boladaomedia://`.
 3. **Especificação.** As escolhas da tela viram um `DownloadSpec`. Uma função pura em Rust (`build_ytdlp_args`) transforma esse spec na lista de argumentos do yt-dlp, coberta por testes de snapshot.
 4. **Fila.** O item é gravado no SQLite com prioridade, e o agendador respeita o limite global, o limite por site e o Modo Jogo.
-5. **Download.** O yt-dlp roda sem shell, sem janela de console e dentro de um Job Object do Windows, com o tráfego passando pelo proxy de banda. O progresso chega em linhas JSON marcadas (`BOLADAO_DL`, `BOLADAO_PP`, `BOLADAO_FILE`) e vira uma porcentagem que nunca volta para trás, mesmo quando vídeo e áudio chegam em streams separados.
+5. **Download.** O yt-dlp roda sem shell, sem janela de console e dentro de um Job Object no Windows (num grupo de processos no Linux e no macOS), com o tráfego passando pelo proxy de banda. O progresso chega em linhas JSON marcadas (`BOLADAO_DL`, `BOLADAO_PP`, `BOLADAO_FILE`) e vira uma porcentagem que nunca volta para trás, mesmo quando vídeo e áudio chegam em streams separados.
 6. **Oficina.** Se houver etapas configuradas, o FFmpeg processa o arquivo e informa o avanço por `-progress pipe:1`.
 7. **Biblioteca.** O arquivo final passa por `ffprobe`, loudness e forma de onda e entra na Biblioteca, enquanto o fundo pulsa a partir do item concluído.
 
@@ -309,13 +309,15 @@ Se algo falhar, o erro do yt-dlp vira uma mensagem no idioma da interface com um
   <img src="docs/screenshots/instalador-opart.png" width="640" alt="Instalador do Boladão com pasta de instalação, atalhos e versões dos motores" />
 </div>
 
+### Windows
+
 1. Baixe o **`Boladao-Instalador.exe`** (cerca de 132 MB) na [página de releases](https://github.com/aekasota/BOLADAO/releases/latest).
 2. Abra o arquivo. O instalador não pede permissão de administrador.
 3. Confira a pasta (o padrão é `%LOCALAPPDATA%\Programs\Boladão`), escolha os atalhos e clique em **Instalar agora**.
 
 O instalador é o próprio Boladão em outro modo. Ele copia o app, cria as pastas `Músicas\Boladão` e `Vídeos\Boladão`, extrai os motores, cria os atalhos marcados e registra o app em *Aplicativos instalados*, com desinstalador próprio. Se o Microsoft Edge WebView2 não estiver presente, ele é instalado em silêncio antes de tudo.
 
-**Atualização automática.** A partir da versão 1.1.0, o Boladão confere a última release do GitHub ao abrir e a cada 6 horas. Quando há versão nova, ele baixa o instalador em segundo plano, pelo limitador de banda (então respeita o Modo Jogo), confere a assinatura digital e mostra um aviso discreto. A atualização entra ao clicar em **Reiniciar agora** ou, sozinha, na próxima vez que o app abrir; downloads em andamento continuam de onde pararam. Quem está na 1.0.0 precisa instalar a 1.1.0 uma vez, à mão.
+**Atualização automática.** A partir da versão 1.1.0, o Boladão confere a última release do GitHub ao abrir e a cada 6 horas. Quando há versão nova, ele baixa o pacote em segundo plano, pelo limitador de banda (então respeita o Modo Jogo), confere a assinatura digital e mostra um aviso discreto. A atualização entra ao clicar em **Reiniciar agora** ou, sozinha, na próxima vez que o app abrir; downloads em andamento continuam de onde pararam. Quem está na 1.0.0 precisa instalar a 1.1.0 uma vez, à mão.
 
 **Requisitos:** Windows 10 ou 11 de 64 bits e cerca de 500 MB livres (o app mais os motores extraídos).
 
@@ -323,6 +325,32 @@ O instalador é o próprio Boladão em outro modo. Ele copia o app, cria as past
 > **SmartScreen:** o executável não tem assinatura digital, então na primeira execução o Windows pode mostrar *"O Windows protegeu o computador"*. Clique em **Mais informações** e depois em **Executar assim mesmo**, ou compile a partir do código seguindo [Rodar localmente](#rodar-localmente).
 
 Para desinstalar, abra *Configurações → Aplicativos*, encontre o Boladão e clique em **Desinstalar**. Suas músicas e vídeos nunca são apagados; uma opção extra remove também configurações, fila e cookies salvos.
+
+### Linux
+
+Dois pacotes, na mesma [página de releases](https://github.com/aekasota/BOLADAO/releases/latest):
+
+- **`Boladao-linux-x86_64.AppImage`**: roda na maioria das distribuições. Dê permissão de execução e abra:
+
+  ```bash
+  chmod +x Boladao-linux-x86_64.AppImage
+  ./Boladao-linux-x86_64.AppImage
+  ```
+
+  É o pacote que se atualiza sozinho, trocando o próprio arquivo. Se ele não abrir, falta o FUSE 2 no sistema (`sudo apt install libfuse2` no Ubuntu e derivados).
+- **`Boladao-linux-amd64.deb`**: para Ubuntu, Debian, Mint e Pop!_OS (`sudo apt install ./Boladao-linux-amd64.deb`). Instalado assim, quem atualiza o Boladão é o próprio sistema de pacotes, então baixe o `.deb` novo a cada versão.
+
+**Requisitos:** x86_64, com glibc 2.35 ou mais nova (Ubuntu 22.04, Debian 12, Fedora 36 ou equivalentes) e WebKitGTK 4.1. Os cookies das contas vão para o chaveiro do sistema (GNOME Keyring ou KWallet); sem ele, ficam num arquivo que só a sua conta lê.
+
+### macOS
+
+1. Baixe o **`Boladao-macos.dmg`**, que roda nativo em Macs com Apple Silicon e com Intel.
+2. Abra o `.dmg` e arraste o Boladão para *Aplicativos*.
+
+**Requisitos:** macOS 12 Monterey ou mais novo.
+
+> [!NOTE]
+> **Gatekeeper:** o app não é notarizado pela Apple, então o macOS recusa a primeira abertura. Abra *Ajustes do Sistema → Privacidade e Segurança*, role até o aviso sobre o Boladão e clique em **Abrir Mesmo Assim**. Isso só é preciso uma vez; as atualizações automáticas chegam sem esse aviso.
 
 <br />
 
@@ -352,10 +380,12 @@ Arrastar um link para a janela também inicia a sondagem, e a alça ⋮⋮ de um
 | Ferramenta | Versão | Observação |
 |---|---|---|
 | Windows | 10 (versão 1803 ou mais nova) ou 11, x64 | `curl.exe` e PowerShell 5.1 já vêm com o sistema |
+| Linux | Ubuntu 22.04 ou mais novo (ou equivalente) | `sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev`, mais Python 3 |
+| macOS | 12 ou mais novo | Ferramentas de linha de comando do Xcode (`xcode-select --install`) e Python 3 |
 | [Rust](https://rustup.rs/) | estável, toolchain `stable-x86_64-pc-windows-msvc` | |
-| [Visual Studio Build Tools](https://visualstudio.microsoft.com/pt-br/visual-cpp-build-tools/) | carga de trabalho *Desenvolvimento para desktop com C++* | fornece o linker do MSVC |
+| [Visual Studio Build Tools](https://visualstudio.microsoft.com/pt-br/visual-cpp-build-tools/) | carga de trabalho *Desenvolvimento para desktop com C++* | só no Windows: fornece o linker do MSVC |
 | [Node.js](https://nodejs.org/) | 20 ou mais novo, com npm | |
-| [WebView2 Runtime](https://developer.microsoft.com/pt-br/microsoft-edge/webview2/) | Evergreen | já vem no Windows 11 e no Windows 10 atualizado |
+| [WebView2 Runtime](https://developer.microsoft.com/pt-br/microsoft-edge/webview2/) | Evergreen | só no Windows: já vem no Windows 11 e no Windows 10 atualizado |
 
 Reserve espaço em disco: os motores baixados ocupam cerca de 525 MB (159 MB em `vendor/cache` e 366 MB em `vendor/bin`), e a pasta `src-tauri/target` pode passar de 10 GB com builds de debug e release.
 
@@ -372,10 +402,18 @@ cd BOLADAO
 powershell -ExecutionPolicy Bypass -File scripts/fetch-binaries.ps1
 ```
 
-O script lê [`vendor/manifest.json`](vendor/manifest.json), confere que o hash esperado de yt-dlp e Deno aparece nos arquivos de checksum oficiais (`SHA2-256SUMS` e `.sha256sum`), baixa os pacotes com `curl.exe`, valida o SHA-256 de cada um e extrai tudo em `vendor/bin/`, pasta ignorada pelo Git. Ele também baixa o bootstrapper oficial do WebView2, que vai embutido no instalador e só é aceito com assinatura Authenticode válida da Microsoft, conferida aqui e de novo a cada build do instalador. Os arquivos ficam em cache em `vendor/cache/`; use `-Force` para baixar de novo.
+No Linux e no macOS, o script é outro:
+
+```bash
+python3 scripts/fetch-binaries.py
+```
+
+Ele lê o manifesto do sistema ([`vendor/x86_64-unknown-linux-gnu.json`](vendor/x86_64-unknown-linux-gnu.json), [`vendor/aarch64-apple-darwin.json`](vendor/aarch64-apple-darwin.json) ou [`vendor/x86_64-apple-darwin.json`](vendor/x86_64-apple-darwin.json)), confere o SHA-256 de cada pacote e prepara tudo em `vendor/bin/<alvo>`. No Linux, o FFmpeg vem dos builds estáticos do [BtbN](https://github.com/BtbN/FFmpeg-Builds), na mesma versão 9.0.2 do Windows. No macOS, ele é compilado a partir do código-fonte oficial ([`scripts/build-ffmpeg-macos.sh`](scripts/build-ffmpeg-macos.sh)), com x264, LAME, Opus e VideoToolbox, o que leva alguns minutos na primeira vez.
+
+No Windows, o script lê [`vendor/manifest.json`](vendor/manifest.json), confere que o hash esperado de yt-dlp e Deno aparece nos arquivos de checksum oficiais (`SHA2-256SUMS` e `.sha256sum`), baixa os pacotes com `curl.exe`, valida o SHA-256 de cada um e extrai tudo em `vendor/bin/`, pasta ignorada pelo Git. Ele também baixa o bootstrapper oficial do WebView2, que vai embutido no instalador e só é aceito com assinatura Authenticode válida da Microsoft, conferida aqui e de novo a cada build do instalador. Os arquivos ficam em cache em `vendor/cache/`; use `-Force` para baixar de novo.
 
 > [!IMPORTANT]
-> Rode este passo antes de qualquer `cargo` ou `npm run tauri`. O [`src-tauri/build.rs`](src-tauri/build.rs) empacota `vendor/bin` dentro do binário e interrompe a compilação se a pasta não existir.
+> Rode este passo antes de qualquer `cargo` ou `npm run tauri`. O [`src-tauri/build.rs`](src-tauri/build.rs) empacota os motores do sistema dentro do binário e interrompe a compilação se eles não existirem.
 
 ### 3. Instalar as dependências do frontend
 
@@ -400,12 +438,12 @@ O Tauri sobe o Vite em `http://localhost:1420` e abre o app com recarga a quente
 # Verificação do TypeScript (tsc) e build de produção do frontend
 npm run build
 
-# 36 testes em Rust
+# Testes em Rust
 cd src-tauri
 cargo test
 ```
 
-O GitHub Actions roda esses mesmos passos, num Windows limpo, a cada push na `main` e em cada pull request ([`ci.yml`](.github/workflows/ci.yml)).
+O GitHub Actions roda esses mesmos passos num Windows, num Ubuntu e num macOS limpos, a cada push na `main` e em cada pull request ([`ci.yml`](.github/workflows/ci.yml)).
 
 Os testes cobrem:
 
@@ -415,13 +453,15 @@ Os testes cobrem:
 - sanitização de nomes e de caminhos longos do Windows;
 - formato Netscape de cookies, comparação de versões do yt-dlp e leitura de formatos verticais de Reels e do X;
 - contraste WCAG dos cinco temas;
-- processos reais: o filho nasce dentro do Job Object, roda até o fim depois de retomado e morre quando o Job fecha;
-- cookies: criptografia DPAPI de verdade, migração dos `.txt` antigos e devolução dos cookies renovados pelo yt-dlp;
+- processos reais: no Windows, o filho nasce dentro do Job Object, roda até o fim depois de retomado e morre quando o Job fecha; no Linux e no macOS, cancelar encerra o grupo inteiro, inclusive os processos que o filho abriu;
+- cookies: criptografia DPAPI de verdade no Windows, arquivos legíveis só pelo usuário no Linux e no macOS, migração dos `.txt` antigos e devolução dos cookies renovados pelo yt-dlp;
+- arquivos com o mesmo nome: *Manter os dois* numera o download inteiro (vídeo e legendas juntos) sem tocar no arquivo antigo;
+- Oficina: codec compatível com o contêiner no áudio *Original*, MP3 com a qualidade escolhida e mudança de velocidade sincronizada em vídeo;
 - retomada: quais pastas temporárias podem ser limpas e a remoção restrita aos arquivos do item cancelado;
 - atualização: comparação de versões, recusa de arquivo adulterado e troca do executável só com assinatura válida;
-- instância única: a segunda abertura é recusada e acorda a primeira, e a versão nova espera a antiga fechar;
+- instância única: a segunda abertura é recusada e acorda a primeira (evento nomeado no Windows, arquivo de trava e socket local no Linux e no macOS), e a versão nova espera a antiga fechar;
 - protocolo de mídia restrito aos nomes que o app gera, e `settings.json` regravado sem apagar o anterior, abrindo também os ajustes de versões antigas;
-- idioma: o idioma do Windows vira português, inglês ou espanhol, as mensagens seguem o idioma atual e os modelos de pasta aceitam campos em qualquer um dos três;
+- idioma: o idioma do sistema vira português, inglês ou espanhol, as mensagens seguem o idioma atual e os modelos de pasta aceitam campos em qualquer um dos três;
 - banda: o pico dos últimos 7 dias descarta os dias que saíram da janela;
 - o limitador de verdade: 20 MB a 2 MB/s em 10 s (±10%) e troca de limite no meio da transferência em menos de 1 s. Só esse teste leva uns 12 s.
 
@@ -439,6 +479,18 @@ npm run build:installer
 
 O script baixa os motores e roda `npm install` se faltar algo, compila com `tauri build --no-bundle` no perfil release (`lto = "fat"`, `codegen-units = 1`, `opt-level = 3`, `strip = true`, `panic = "abort"`) e grava os arquivos. Se encontrar a chave privada de atualização (padrão `%USERPROFILE%\.boladao\updater.key`, ou o caminho em `BOLADAO_UPDATER_KEY`), assina o instalador com `tauri signer sign` e gera o `latest.json`; sem a chave, o instalador sai normal, mas não serve como atualização. Para gerar só o executável avulso, use `scripts/build-release.ps1`.
 
+No Linux e no macOS, depois de preparar os motores, o Tauri gera os pacotes:
+
+```bash
+# Linux: AppImage e .deb em src-tauri/target/release/bundle/
+npx tauri build --bundles appimage,deb
+
+# macOS: .app e .dmg universais (Apple Silicon e Intel); prepare os motores dos dois alvos antes
+python3 scripts/fetch-binaries.py aarch64-apple-darwin
+python3 scripts/fetch-binaries.py x86_64-apple-darwin
+npx tauri build --target universal-apple-darwin --bundles app,dmg
+```
+
 ### Publicar uma versão
 
 1. Suba a versão em `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`.
@@ -451,12 +503,14 @@ gh release create v1.1.0 instalador/Boladao-Instalador.exe instalador/latest.jso
 
 Os apps instalados leem `releases/latest/download/latest.json`, então só a release mais recente (fora de rascunho e pré-release) é oferecida.
 
+Assim que a release é publicada, o workflow [`release.yml`](.github/workflows/release.yml) compila os pacotes do Linux e do macOS no GitHub Actions e os anexa à mesma release. Para que eles também se atualizem sozinhos, cadastre o conteúdo da chave de atualização como o segredo `TAURI_SIGNING_PRIVATE_KEY` do repositório (uma vez só). Com ele, o workflow assina os pacotes e publica `latest-linux-x86_64.json` e `latest-macos.json`; sem ele, os pacotes sobem do mesmo jeito, mas não se atualizam.
+
 > [!WARNING]
 > A chave privada de atualização fica fora do repositório e não pode se perder: os apps instalados só aceitam atualizações assinadas por ela. Faça um backup de `%USERPROFILE%\.boladao\updater.key` em lugar seguro. Se ela vazar ou sumir, a troca de chave exige uma versão instalada à mão.
 
 ### Atualizar os motores embutidos
 
-As versões ficam fixadas em `vendor/manifest.json`, com URL, arquivo de checksum e SHA-256 de cada pacote. Para trocar uma versão, edite a entrada, rode `scripts/fetch-binaries.ps1 -Force` e compile de novo: o `build.rs` percebe a mudança e reempacota. Isso muda a versão que vai no instalador; depois de instalado, o próprio app atualiza o yt-dlp em *Ajustes → Componentes*.
+As versões ficam fixadas em `vendor/manifest.json` (Windows) e em `vendor/<alvo>.json` (Linux e macOS), com URL, arquivo de checksum e SHA-256 de cada pacote. Para trocar uma versão, edite a entrada, rode `scripts/fetch-binaries.ps1 -Force` e compile de novo: o `build.rs` percebe a mudança e reempacota. Isso muda a versão que vai no instalador; depois de instalado, o próprio app atualiza o yt-dlp em *Ajustes → Componentes*.
 
 <details>
 <summary><strong>Problemas comuns</strong></summary>
@@ -470,6 +524,8 @@ As versões ficam fixadas em `vendor/manifest.json`, com URL, arquivo de checksu
 | `Port 1420 is already in use` | Outro processo está usando a porta do Vite, que roda com `strictPort`. Encerre-o e rode de novo. |
 | ``linker `link.exe` not found`` | Falta a carga *Desenvolvimento para desktop com C++* do Visual Studio Build Tools. |
 | Erro de política de execução do PowerShell | Os comandos acima já usam `-ExecutionPolicy Bypass`, que vale só para aquele processo. |
+| Linux: janela em branco ou painéis que não aparecem | O Boladão já desliga o renderizador DMA-BUF do WebKitGTK, a causa mais comum (drivers NVIDIA, máquinas virtuais, WSL). Se ainda acontecer, abra com `WEBKIT_DISABLE_COMPOSITING_MODE=1`. |
+| macOS: o build para no FFmpeg | Faltam as ferramentas de linha de comando do Xcode: rode `xcode-select --install` e repita `scripts/fetch-binaries.py`. |
 
 </details>
 
@@ -511,14 +567,14 @@ Os motores viajam dentro do binário. O `build.rs` comprime cada componente em u
 
 - **Sem shell no caminho da mídia.** yt-dlp, FFmpeg, FFprobe e Deno são iniciados direto com `Command::new` e uma lista de `OsString`, com `--` antes da URL e a flag `CREATE_NO_WINDOW`. Só links `http://` e `https://` passam.
 - **Flags perigosas bloqueadas.** Argumentos extras do usuário passam por `validate_extra_args`, que recusa `--exec`, `-o`/`--output`, `-P`/`--paths`, `--proxy`, `--ffmpeg-location`, `--js-runtimes`, `--netrc`, `--netrc-cmd`, `--netrc-location`, `-a`/`--batch-file`, `--config-locations`, `--load-info-json`, `--plugin-dirs`, `--print-to-file` e as variantes de `--write-*-link`.
-- **Nenhum processo órfão.** Cada download roda num Job Object com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`: cancelar, pausar ou fechar o app encerra a árvore inteira de processos. O processo nasce suspenso e só é retomado depois de entrar no Job Object, então nem ele nem os processos que ele abre rodam fora do grupo. Se a associação falhar, o processo é encerrado e o download falha com erro, em vez de seguir solto.
+- **Nenhum processo órfão.** No Windows, cada download roda num Job Object com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`: cancelar, pausar ou fechar o app encerra a árvore inteira de processos. O processo nasce suspenso e só é retomado depois de entrar no Job Object, então nem ele nem os processos que ele abre rodam fora do grupo. Se a associação falhar, o processo é encerrado e o download falha com erro, em vez de seguir solto. No Linux e no macOS, cada processo abre o próprio grupo, que leva junto o FFmpeg e o Deno iniciados pelo yt-dlp, e cancelar, pausar ou fechar o app encerra o grupo inteiro.
 - **Uma instância por sessão.** Uma segunda abertura só traz para a frente a janela que já está aberta, antes de tocar na fila. Duas instâncias baixariam os mesmos itens duas vezes, nos mesmos arquivos.
-- **Cookies criptografados.** Cookies de sessão valem como senha, então ficam guardados com a DPAPI do Windows, presos à sua conta de usuário. A cópia em texto que o yt-dlp exige existe só enquanto ele roda; os cookies que ele renova voltam criptografados, e cópias esquecidas por um fechamento abrupto são apagadas na abertura seguinte.
-- **Atualizações assinadas.** O app só instala um executável cuja assinatura minisign confira com a chave pública embutida nele, e só de URLs das releases deste repositório. A assinatura é conferida no download e de novo antes de trocar o executável.
+- **Cookies protegidos.** Cookies de sessão valem como senha, então ficam guardados com a DPAPI no Windows (presos à sua conta de usuário), no Keychain no macOS e no chaveiro do sistema no Linux (ou, sem ele, num arquivo que só a sua conta lê). A cópia em texto que o yt-dlp exige existe só enquanto ele roda; os cookies que ele renova voltam criptografados, e cópias esquecidas por um fechamento abrupto são apagadas na abertura seguinte.
+- **Atualizações assinadas.** O app só instala um pacote (instalador, AppImage ou `.app`) cuja assinatura minisign confira com a chave pública embutida nele, e só de URLs das releases deste repositório. A assinatura é conferida no download e de novo antes de trocar o executável.
 - **IPC isolado.** [`src-tauri/capabilities/default.json`](src-tauri/capabilities/default.json) libera comandos só para a janela `main`. As janelas de login (`login-*`) usam um diretório de dados próprio e não têm acesso nenhum ao backend.
 - **CSP restrita.** Só scripts da própria origem rodam. O protocolo `boladaomedia://` serve apenas arquivos das pastas de cache, só para a janela principal e só com os nomes que o próprio app gera (hash ou UUID), o que recusa `..`, barras e nomes como `C:arquivo`.
 - **Proxy com credencial.** O proxy local só aceita a credencial aleatória da sessão, comparada em tempo constante, e o comando equivalente copiado vem com ela mascarada.
-- **Nomes do Windows.** Nomes reservados (`CON`, `PRN`, `AUX`, `NUL`, `COM1` a `COM9`, `LPT1` a `LPT9`) recebem um prefixo, `--windows-filenames` fica sempre ligado e `--trim-filenames` é calculado pela profundidade da pasta para respeitar o `MAX_PATH`. Arquivos com o mesmo nome seguem a política escolhida: *Manter os dois (2)*, *Substituir* ou *Pular*.
+- **Nomes que valem em qualquer disco.** Nomes reservados do Windows (`CON`, `PRN`, `AUX`, `NUL`, `COM1` a `COM9`, `LPT1` a `LPT9`) recebem um prefixo e `--windows-filenames` fica sempre ligado, inclusive no Linux e no macOS, para os arquivos copiarem sem erro para pendrives e HDs formatados no Windows. `--trim-filenames` respeita o `MAX_PATH` no Windows e os 255 bytes por nome no Linux e no macOS. Arquivos com o mesmo nome seguem a política escolhida: *Manter os dois (2)*, *Substituir* ou *Pular*.
 
 ### Onde ficam os dados
 
@@ -534,6 +590,8 @@ Os motores viajam dentro do binário. O `build.rs` comprime cada componente em u
 | Atualização baixada, antes de instalar | `%LOCALAPPDATA%\Boladao\updates` |
 | Modelo do Whisper | `%LOCALAPPDATA%\Boladao\models` |
 | Arquivos temporários | `.boladao-tmp`, dentro da pasta de destino (no mesmo disco) |
+
+No Linux, configurações e fila ficam em `~/.config/boladao`, e o resto (motores, cache, cookies sem chaveiro, atualizações, Whisper) em `~/.local/share/boladao`. No macOS, tudo fica em `~/Library/Application Support/Boladao`. As pastas de músicas e vídeos seguem as do sistema (no Mac, `Música` e `Filmes`).
 
 <details>
 <summary><strong>Estrutura do projeto</strong></summary>
@@ -614,7 +672,7 @@ BOLADAO/
 
 <br />
 
-Não. O Boladão é feito para Windows 10 e 11 (x64) e depende de recursos do sistema, como os Job Objects, a detecção de jogos em tela cheia e o WebView2.
+Sim, desde a versão 1.3.0: AppImage e `.deb` para Linux x86_64 e um `.dmg` universal para macOS 12 ou mais novo, com Apple Silicon ou Intel (veja [Como instalar](#como-instalar)). Fila, Oficina, Biblioteca, limitador de banda, contas e atualização automática funcionam nos três sistemas. As diferenças estão em [Limitações conhecidas](#limitações-conhecidas).
 
 </details>
 
@@ -627,7 +685,7 @@ Não há telemetria. Fora os sites de onde você baixa (e as janelas de login, q
 
 - GitHub, para conferir e baixar versões novas do Boladão (ao abrir e a cada 6 horas), para a verificação semanal de versões do yt-dlp e para a atualização dele, quando você aceita;
 - Hugging Face, para baixar o modelo do Whisper, se você ligar a transcrição;
-- Microsoft, pelo instalador oficial do WebView2, se ele estiver faltando no sistema.
+- Microsoft, pelo instalador oficial do WebView2, se ele estiver faltando no Windows.
 
 </details>
 
@@ -665,6 +723,9 @@ Pode, com cuidado. Usar uma conta logada com o yt-dlp pode levar a restrições 
 - **DRM.** Spotify, Netflix, Disney+, Prime Video, Apple Music, Deezer e Tidal usam DRM e não são suportados pelo yt-dlp. O app reconhece esses links e avisa na hora.
 - **Cookies do Chrome e do Edge.** A criptografia *App-Bound* desses navegadores (v127+) impede a leitura dos cookies por outros programas no Windows. Para o YouTube, use o Firefox ou um `cookies.txt`; para as outras plataformas, a janela de login em *Ajustes → Contas*.
 - **Transcrição experimental.** O modelo `base` do Whisper (~148 MB) não vai no instalador. Ele é baixado do Hugging Face na primeira vez em que a transcrição roda.
+- **Modo Jogo no Linux e no macOS.** Ele entra pela lista de jogos (no Linux, jogos do Proton aparecem com o nome do `.exe`). A detecção de qualquer app em tela cheia só existe no Windows.
+- **macOS sem notarização.** Sem a conta paga de desenvolvedor da Apple, a primeira abertura pede a liberação em *Privacidade e Segurança*. Como cada versão tem uma assinatura local nova, o macOS também pode pedir de novo acesso aos cookies salvos no Keychain depois de uma atualização.
+- **Linux sem chaveiro.** Num sistema sem GNOME Keyring nem KWallet, os cookies ficam num arquivo legível só pela sua conta, e não criptografados.
 - **Oficina parcial na interface.** O pipeline já aceita fade, mono/estéreo, escala, FPS, extração de quadro em PNG e recodificação em HEVC e AV1, mas esses controles ainda não estão na tela.
 
 <br />
@@ -689,8 +750,12 @@ Os binários publicados em *Releases* incluem ferramentas de terceiros, baixadas
 |---|---|---|---|
 | yt-dlp | `2026.10.26` | Unlicense | [yt-dlp/yt-dlp](https://github.com/yt-dlp/yt-dlp) |
 | Deno | `2.9.8` | MIT | [denoland/deno](https://github.com/denoland/deno) |
-| FFmpeg e FFprobe (`full_build-shared`) | `9.0.2` | GPLv3 | [GyanD/codexffmpeg](https://github.com/GyanD/codexffmpeg) |
+| FFmpeg e FFprobe, Windows (`full_build-shared`) | `9.0.2` | GPLv3 | [GyanD/codexffmpeg](https://github.com/GyanD/codexffmpeg) |
+| FFmpeg e FFprobe, Linux (`linux64-gpl-shared`) | `9.0.2` | GPLv3 | [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) |
+| FFmpeg e FFprobe, macOS (compilado com x264, LAME e Opus) | `8.1.2` | GPLv2 | [ffmpeg.org](https://ffmpeg.org/download.html#releases) |
 | Bootstrapper do Microsoft Edge WebView2 | Evergreen | Termos da Microsoft | [Microsoft WebView2](https://developer.microsoft.com/pt-br/microsoft-edge/webview2/) |
+
+O porte para macOS partiu do estudo do fork [mecBOLADAO](https://github.com/leonardobluestriker/mecBOLADAO), da STRIKER Code Team, que mostrou o caminho para os processos, o Keychain, os motores nativos e a receita de compilação do FFmpeg.
 
 As fontes [Archivo](https://github.com/Omnibus-Type/Archivo) e [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) vão embutidas no app e são distribuídas sob a SIL Open Font License 1.1.
 

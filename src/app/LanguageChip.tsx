@@ -2,11 +2,12 @@ import React from "react";
 import { Check, Languages } from "lucide-react";
 import { HTML_LANG, Lang, LANGS, LANGUAGE_NAMES, useSystemLanguage, useT } from "../i18n";
 import { useSettingsStore } from "../stores/settingsStore";
+import { OS_NAME } from "../lib/platform";
 import { Popover, Toggle } from "../ui/Primitives";
 
 /**
- * Status-bar chip with the interface language. It follows Windows until the user picks a language,
- * and picking one turns "follow Windows" off by itself.
+ * Status-bar chip with the interface language. It follows the system until the user picks a
+ * language, and picking one turns "follow the system" off by itself.
  */
 export const LanguageChip: React.FC = () => {
   const t = useT();
@@ -53,7 +54,7 @@ export const LanguageChip: React.FC = () => {
                   <span lang={HTML_LANG[lang]} style={{ flex: 1 }}>
                     {LANGUAGE_NAMES[lang]}
                   </span>
-                  {lang === system && <span className="lang-tag">Windows</span>}
+                  {lang === system && <span className="lang-tag">{OS_NAME}</span>}
                   <Check size={14} className="lang-pop-check" aria-hidden="true" />
                 </button>
               );
@@ -63,7 +64,7 @@ export const LanguageChip: React.FC = () => {
             <Toggle
               checked={follow}
               onChange={(on) => updateSettings({ language: on ? "auto" : current })}
-              label={t.app.language.followWindows}
+              label={t.app.language.followSystem(OS_NAME)}
             />
           </div>
         </Popover.Content>

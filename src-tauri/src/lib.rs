@@ -8,6 +8,7 @@ pub mod classify;
 pub mod cookies;
 pub mod errors;
 pub mod gamemode;
+#[cfg(windows)]
 pub mod installer;
 pub mod instance;
 pub mod ipc;
@@ -25,6 +26,7 @@ pub mod workshop;
 
 use crate::bins::BinManager;
 use crate::gamemode::GameModeMonitor;
+#[cfg(windows)]
 use crate::installer::{detect_launch_mode, ensure_webview2_or_bootstrap, LaunchMode};
 use crate::ipc::AppState;
 use crate::library::{spectrograms_cache_dir, waveforms_cache_dir, LibraryStore};
@@ -45,6 +47,7 @@ use tauri::window::Color;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_notification::NotificationExt;
 
+#[cfg(windows)]
 fn run_setup_init() {
     let cfg = load_or_init_settings();
     let _ = fs::create_dir_all(&cfg.music_root);
@@ -60,6 +63,7 @@ fn run_setup_init() {
     }
 }
 
+#[cfg(windows)]
 fn run_installer_or_uninstaller_ui(launch_mode: LaunchMode) {
     if !ensure_webview2_or_bootstrap() {
         winproc::show_missing_webview2_dialog();
@@ -114,18 +118,40 @@ fn run_installer_or_uninstaller_ui(launch_mode: LaunchMode) {
 }
 
 pub fn run() {
-    // Messages shown before the settings load (installer, missing WebView2) follow Windows.
-    i18n::set(i18n::system());
-
-    if std::env::args().any(|arg| arg == "--setup-init") {
-        run_setup_init();
-        return;
+    // WebKitGTK's DMA-BUF renderer leaves parts of the page unpainted (popovers, sometimes the
+    // whole window) with NVIDIA drivers, in virtual machines, under WSL and in the AppImage, which
+    // carries its own libraries. The older path paints everywhere. The variable only counts when
+    // it is in the environment the process starts with (setting it here is too late inside the
+    // AppImage), so the app restarts itself once with it; whoever sets it keeps their choice.
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        use std::os::unix::process::CommandExt;
+        if let Ok(exe) = std::env::current_exe() {
+            // Only returns when the restart fails; the app then goes on without it.
+            let err = std::process::Command::new(exe)
+                .args(std::env::args_os().skip(1))
+                .env("WEBKIT_DISABLE_DMABUF_RENDERER", "1")
+                .exec();
+            eprintln!("[boladao] Não foi possível reabrir com o renderizador compatível: {err}");
+        }
     }
 
-    let launch_mode = detect_launch_mode();
-    if !matches!(launch_mode, LaunchMode::App) {
-        run_installer_or_uninstaller_ui(launch_mode);
-        return;
+    // Messages shown before the settings load (installer, missing WebView2) follow the system.
+    i18n::set(i18n::system());
+
+    // Windows installs itself (the app is its own installer); Linux and macOS use their packages.
+    #[cfg(windows)]
+    {
+        if std::env::args().any(|arg| arg == "--setup-init") {
+            run_setup_init();
+            return;
+        }
+
+        let launch_mode = detect_launch_mode();
+        if !matches!(launch_mode, LaunchMode::App) {
+            run_installer_or_uninstaller_ui(launch_mode);
+            return;
+        }
     }
 
     // One Boladão per session: a second launch only brings the open window forward, before it
@@ -143,11 +169,14 @@ pub fn run() {
         Ok(false) => {}
         Err(e) => eprintln!("[boladao] Atualização não aplicada: {e}"),
     }
-    installer::sync_registered_version();
+    #[cfg(windows)]
+    {
+        installer::sync_registered_version();
 
-    if !ensure_webview2_or_bootstrap() {
-        winproc::show_missing_webview2_dialog();
-        return;
+        if !ensure_webview2_or_bootstrap() {
+            winproc::show_missing_webview2_dialog();
+            return;
+        }
     }
 
     let settings = Arc::new(RwLock::new(load_or_init_settings()));
@@ -274,21 +303,36 @@ pub fn run() {
                 .unwrap()
         })
         .manage(app_state)
-        .manage(LaunchMode::App)
         .setup(move |app| {
+            #[cfg(windows)]
+            app.manage(LaunchMode::App);
             let handle = app.handle().clone();
 
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+            // The interface learns the system here: macOS keeps its own window buttons on the left.
+            let init_script = format!(
+                "window.__BOLADAO_LAUNCH__ = {{\"mode\":\"app\"}}; window.__BOLADAO_OS__ = \"{}\";",
+                std::env::consts::OS
+            );
+            let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title(APP_NAME)
                 .inner_size(1120.0, 740.0)
                 .min_inner_size(920.0, 620.0)
-                .decorations(false)
                 .shadow(true)
                 .resizable(true)
                 .center()
                 .background_color(Color(14, 14, 16, 255))
-                .initialization_script("window.__BOLADAO_LAUNCH__ = {\"mode\":\"app\"};")
-                .build()?;
+                .initialization_script(&init_script);
+            // Windows and Linux draw the title bar themselves; macOS keeps the native buttons over
+            // the app's own top bar.
+            #[cfg(not(target_os = "macos"))]
+            let builder = builder.decorations(false);
+            #[cfg(target_os = "macos")]
+            let builder = builder
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true)
+                // Centered on the brand pill (32 px tall, 9 px from the top).
+                .traffic_light_position(tauri::LogicalPosition::new(16.0, 19.0));
+            builder.build()?;
 
             queue.bind_app_handle(handle.clone());
 
@@ -454,12 +498,18 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            #[cfg(windows)]
             ipc::get_launch_mode,
             ipc::get_system_language,
+            #[cfg(windows)]
             ipc::get_installer_defaults,
+            #[cfg(windows)]
             ipc::install_boladao,
+            #[cfg(windows)]
             ipc::launch_installed_boladao,
+            #[cfg(windows)]
             ipc::uninstall_boladao,
+            #[cfg(windows)]
             ipc::close_uninstaller,
             ipc::get_bins_status,
             ipc::run_ytdlp_diagnostic,
@@ -515,8 +565,15 @@ pub fn run() {
             ipc::generate_spectrogram,
             ipc::run_workshop,
         ])
-        .run(tauri::generate_context!())
-        .expect("Erro executando aplicação Tauri");
+        .build(tauri::generate_context!())
+        .expect("Erro executando aplicação Tauri")
+        .run(|_app, _event| {
+            // macOS: clicking the Dock icon brings back the window hidden in the menu bar.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = _event {
+                show_main_window(_app);
+            }
+        });
 }
 
 /// Cached media names as the app generates them: a SHA-256 hex or a UUID, plus `.img` or `.png`.
@@ -612,7 +669,8 @@ fn setup_system_tray(app: &AppHandle) -> tauri::Result<()> {
     let mut builder = TrayIconBuilder::new()
         .menu(&menu)
         .tooltip(APP_NAME)
-        .show_menu_on_left_click(false)
+        // macOS opens menu bar menus with a plain click; Windows keeps the click for the window.
+        .show_menu_on_left_click(cfg!(target_os = "macos"))
         .on_menu_event(|app, event| {
             let state = app.state::<AppState>();
             match event.id.as_ref() {

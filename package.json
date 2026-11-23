@@ -1,7 +1,7 @@
 {
   "name": "boladao",
   "private": true,
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "Boladão — Downloader desktop em Rust + Tauri com yt-dlp, Deno e FFmpeg embutidos e visual Op-Art",
   "type": "module",
   "scripts": {

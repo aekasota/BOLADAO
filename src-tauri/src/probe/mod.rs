@@ -689,7 +689,7 @@ pub fn thumbs_cache_dir() -> PathBuf {
 /// Downloads a remote thumbnail once into `%LOCALAPPDATA%\Boladao\cache\thumbs\` and returns
 /// `http://boladaomedia.localhost/thumb/<hash>.img` so strict CSP works without external domains.
 pub async fn cache_thumbnail_to_disk(remote_url: &str, proxy_url: Option<&str>) -> Option<String> {
-    if remote_url.starts_with("http://boladaomedia.localhost/") {
+    if remote_url.starts_with(&crate::paths::local_media_url("thumb", "")) {
         return Some(remote_url.to_string());
     }
     let mut hasher = Sha256::new();
@@ -699,7 +699,7 @@ pub async fn cache_thumbnail_to_disk(remote_url: &str, proxy_url: Option<&str>) 
     let file_path = thumbs_cache_dir().join(&fname);
 
     if file_path.is_file() {
-        return Some(format!("http://boladaomedia.localhost/thumb/{fname}"));
+        return Some(crate::paths::local_media_url("thumb", &fname));
     }
 
     let mut builder = reqwest::Client::builder()
@@ -716,7 +716,7 @@ pub async fn cache_thumbnail_to_disk(remote_url: &str, proxy_url: Option<&str>) 
         return None;
     }
     fs::write(&file_path, &bytes).ok()?;
-    Some(format!("http://boladaomedia.localhost/thumb/{fname}"))
+    Some(crate::paths::local_media_url("thumb", &fname))
 }
 
 #[cfg(test)]

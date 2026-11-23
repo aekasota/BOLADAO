@@ -33,7 +33,7 @@ export const es: Messages = {
     freeDisk: (size: string) => `${size} libres`,
     language: {
       title: "Idioma",
-      followWindows: "Seguir el idioma de Windows",
+      followSystem: (os: string) => `Seguir el idioma de ${os}`,
       chipAria: (name: string) => `Idioma: ${name}. Cambiar idioma`,
     },
     authorLink: "Abrir el GitHub de @aekasota",
@@ -56,7 +56,11 @@ export const es: Messages = {
   },
   queue: {
     playlistFallback: "Playlist",
-    dragOut: "Arrastra hacia fuera (Explorer, Premiere, DAW)",
+    dragOut: {
+      windows: "Arrastra hacia fuera (Explorer, Premiere, DAW)",
+      macos: "Arrastra hacia fuera (Finder, Final Cut, DAW)",
+      linux: "Arrastra hacia fuera (gestor de archivos, editor, DAW)",
+    },
     dragReorder: "Arrastra para reordenar la cola",
     failedFallback: "Error en la descarga",
     eta: (eta: string) => `Quedan ${eta}`,
@@ -267,18 +271,34 @@ export const es: Messages = {
       autoToggle: "Activar automáticamente al abrir un juego o una aplicación en pantalla completa",
       exeList: "Ejecutables que activan el Modo juego",
       clickToRemove: "Haz clic para quitar",
-      exePlaceholder: "Ej.: cyberpunk2077.exe",
+      exePlaceholder: {
+        windows: "Ej.: cyberpunk2077.exe",
+        macos: "Ej.: Cyberpunk2077",
+        linux: "Ej.: cs2 o cyberpunk2077.exe (Proton)",
+      },
       add: "Añadir",
       runningNow: "En ejecución ahora (haz clic para añadir):",
     },
     accounts: {
       title: "Cuentas y cookies",
       youtubeWarnTitle: "Aviso sobre YouTube:",
-      youtubeWarnBody:
-        "Usar una cuenta con sesión iniciada en yt-dlp puede provocar restricciones en esa cuenta. Úsala solo cuando haga falta (restricción de edad, miembros), de preferencia con una cuenta secundaria. Chrome y Edge (v127+) usan cifrado app-bound en Windows, así que para YouTube es mejor usar",
+      youtubeWarnBody: {
+        windows:
+          "Usar una cuenta con sesión iniciada en yt-dlp puede provocar restricciones en esa cuenta. Úsala solo cuando haga falta (restricción de edad, miembros), de preferencia con una cuenta secundaria. Chrome y Edge (v127+) usan cifrado app-bound en Windows, así que para YouTube es mejor usar",
+        macos:
+          "Usar una cuenta con sesión iniciada en yt-dlp puede provocar restricciones en esa cuenta. Úsala solo cuando haga falta (restricción de edad, miembros), de preferencia con una cuenta secundaria. Para YouTube es mejor usar",
+        linux:
+          "Usar una cuenta con sesión iniciada en yt-dlp puede provocar restricciones en esa cuenta. Úsala solo cuando haga falta (restricción de edad, miembros), de preferencia con una cuenta secundaria. Para YouTube es mejor usar",
+      },
       youtubeWarnOr: "o importar un",
-      cookiesNote:
-        "Las cookies funcionan como una contraseña. Boladão guarda las tuyas cifradas por Windows (DPAPI), vinculadas a tu cuenta de usuario, y solo las descifra en un archivo temporal mientras yt-dlp se ejecuta.",
+      cookiesNote: {
+        windows:
+          "Las cookies funcionan como una contraseña. Boladão guarda las tuyas cifradas por Windows (DPAPI), vinculadas a tu cuenta de usuario, y solo las descifra en un archivo temporal mientras yt-dlp se ejecuta.",
+        macos:
+          "Las cookies funcionan como una contraseña. Boladão guarda las tuyas en el Llavero de macOS y solo las pone en un archivo temporal mientras yt-dlp se ejecuta.",
+        linux:
+          "Las cookies funcionan como una contraseña. Boladão guarda las tuyas en el llavero del sistema (GNOME Keyring o KWallet) o, si no hay uno, en un archivo que solo tu cuenta puede leer, y solo las pone en un archivo temporal mientras yt-dlp se ejecuta.",
+      },
       connected: (detail: string) => `Conectado (${detail})`,
       cookieCount: (n: number) => `${n} cookies`,
       importedCount: (n: number) => `cookies.txt · ${n} cookies`,

@@ -94,7 +94,7 @@ pub fn from_tag(tag: &str) -> Lang {
     }
 }
 
-/// Language of the Windows interface.
+/// Language of the system interface (Windows, the macOS preferred language, or the Linux locale).
 pub fn system() -> Lang {
     #[cfg(windows)]
     {
@@ -110,13 +110,15 @@ pub fn system() -> Lang {
             _ => Lang::En,
         }
     }
+    // GUI apps on macOS get no LANG; sys-locale asks the system itself (and reads the locale
+    // variables on Linux).
     #[cfg(not(windows))]
     {
-        from_tag(&std::env::var("LANG").unwrap_or_default())
+        from_tag(&sys_locale::get_locale().unwrap_or_default())
     }
 }
 
-/// Regional format chosen in Windows ("pt-BR", "es-MX"), used for numbers and dates.
+/// Regional format chosen in the system ("pt-BR", "es-MX"), used for numbers and dates.
 pub fn system_locale() -> String {
     #[cfg(windows)]
     {
@@ -131,7 +133,12 @@ pub fn system_locale() -> String {
     }
     #[cfg(not(windows))]
     {
-        "pt-BR".to_string()
+        // "pt_BR.UTF-8" style values come back as "pt-BR"; "C" and "POSIX" mean no choice, and
+        // then the interface is in English (see `system`), so the numbers follow it.
+        sys_locale::get_locale()
+            .map(|tag| tag.split(['.', '@']).next().unwrap_or_default().replace('_', "-"))
+            .filter(|tag| !tag.is_empty() && tag != "C" && tag != "POSIX")
+            .unwrap_or_else(|| "en-US".to_string())
     }
 }
 

@@ -12,6 +12,25 @@ use tauri::{AppHandle, Emitter};
 
 include!(concat!(env!("OUT_DIR"), "/embedded_manifest.rs"));
 
+const YTDLP_EXE: &str = if cfg!(windows) { "yt-dlp.exe" } else { "yt-dlp" };
+const DENO_EXE: &str = if cfg!(windows) { "deno.exe" } else { "deno" };
+const FFMPEG_EXE: &str = if cfg!(windows) { "ffmpeg.exe" } else { "ffmpeg" };
+const FFPROBE_EXE: &str = if cfg!(windows) { "ffprobe.exe" } else { "ffprobe" };
+/// FFmpeg's main executable inside its folder: the Linux build keeps its shared libraries in
+/// `lib/`, next to `bin/` (the executables find them through `$ORIGIN/../lib`).
+const FFMPEG_MAIN: &str = if cfg!(target_os = "linux") { "bin/ffmpeg" } else { FFMPEG_EXE };
+/// yt-dlp release asset for this system: the "onedir" zips on Windows and Linux (they start
+/// faster than the single-file builds), the single universal file on macOS.
+const YTDLP_ASSET: &str = if cfg!(windows) {
+    "yt-dlp_win.zip"
+} else if cfg!(target_os = "macos") {
+    "yt-dlp_macos"
+} else {
+    "yt-dlp_linux.zip"
+};
+/// Name of the executable inside the zip, renamed to `YTDLP_EXE` once installed.
+const YTDLP_IN_ZIP: &str = if cfg!(windows) { "yt-dlp.exe" } else { "yt-dlp_linux" };
+
 static YTDLP_TAR_ZST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ytdlp.tar.zst"));
 static DENO_TAR_ZST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/deno.tar.zst"));
 static FFMPEG_TAR_ZST: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ffmpeg.tar.zst"));
@@ -66,7 +85,11 @@ pub struct BinManager {
 
 impl BinManager {
     pub fn new() -> Arc<Self> {
-        let root_dir = app_local_dir().join("bin");
+        Self::with_root(app_local_dir().join("bin"))
+    }
+
+    /// Manager for engines kept in `root_dir` instead of the app folder (used by the tests).
+    pub fn with_root(root_dir: PathBuf) -> Arc<Self> {
         let _ = fs::create_dir_all(&root_dir);
         let initial = BinsStatusPayload {
             ready: false,
@@ -103,7 +126,7 @@ impl BinManager {
                     .join("ytdlp")
                     .join("versions")
                     .join(ver)
-                    .join("yt-dlp.exe");
+                    .join(YTDLP_EXE);
                 if versioned.is_file() {
                     return versioned;
                 }
@@ -113,23 +136,29 @@ impl BinManager {
             .join("ytdlp")
             .join("versions")
             .join(EMBEDDED_YTDLP_META.version)
-            .join("yt-dlp.exe")
+            .join(YTDLP_EXE)
     }
 
     pub fn deno_exe(&self) -> PathBuf {
-        self.root_dir.join("deno").join("deno.exe")
+        self.root_dir.join("deno").join(DENO_EXE)
     }
 
+    /// Folder with `ffmpeg` and `ffprobe` (handed to yt-dlp as `--ffmpeg-location`).
     pub fn ffmpeg_dir(&self) -> PathBuf {
-        self.root_dir.join("ffmpeg")
+        let dir = self.root_dir.join("ffmpeg");
+        if cfg!(target_os = "linux") {
+            dir.join("bin")
+        } else {
+            dir
+        }
     }
 
     pub fn ffmpeg_exe(&self) -> PathBuf {
-        self.ffmpeg_dir().join("ffmpeg.exe")
+        self.ffmpeg_dir().join(FFMPEG_EXE)
     }
 
     pub fn ffprobe_exe(&self) -> PathBuf {
-        self.ffmpeg_dir().join("ffprobe.exe")
+        self.ffmpeg_dir().join(FFPROBE_EXE)
     }
 
     fn emit_state(&self, app: Option<&AppHandle>) {
@@ -142,8 +171,8 @@ impl BinManager {
     /// Checks whether every component is already extracted and valid without hashing 360 MB on boot.
     pub fn needs_extraction(&self) -> bool {
         !self.is_ytdlp_ready()
-            || !self.is_simple_component_ready(&EMBEDDED_DENO_META, "deno.exe")
-            || !self.is_simple_component_ready(&EMBEDDED_FFMPEG_META, "ffmpeg.exe")
+            || !self.is_simple_component_ready(&EMBEDDED_DENO_META, DENO_EXE)
+            || !self.is_simple_component_ready(&EMBEDDED_FFMPEG_META, FFMPEG_MAIN)
     }
 
     fn is_simple_component_ready(&self, meta: &EmbeddedComponentMeta, main_exe: &str) -> bool {
@@ -174,7 +203,7 @@ impl BinManager {
         if let Ok(cur_ver) = fs::read_to_string(&current_ptr) {
             let cur_ver = cur_ver.trim();
             if !cur_ver.is_empty() {
-                let exe = base.join("versions").join(cur_ver).join("yt-dlp.exe");
+                let exe = base.join("versions").join(cur_ver).join(YTDLP_EXE);
                 // Never overwrite a newer user-updated yt-dlp!
                 if exe.is_file() && compare_versions(cur_ver, EMBEDDED_YTDLP_META.version) >= 0 {
                     return true;
@@ -185,15 +214,15 @@ impl BinManager {
     }
 
     /// Ensures all embedded binaries are extracted atomically and FFmpeg capabilities are probed.
-    pub async fn ensure_ready(&self, app: Option<AppHandle>, ytdlp_channel: String) -> Result<(), String> {
+    pub async fn ensure_ready(self: &Arc<Self>, app: Option<AppHandle>, ytdlp_channel: String) -> Result<(), String> {
         {
             let mut st = self.state.write();
             st.ytdlp_channel = ytdlp_channel;
         }
 
         let need_ytdlp = !self.is_ytdlp_ready();
-        let need_deno = !self.is_simple_component_ready(&EMBEDDED_DENO_META, "deno.exe");
-        let need_ffmpeg = !self.is_simple_component_ready(&EMBEDDED_FFMPEG_META, "ffmpeg.exe");
+        let need_deno = !self.is_simple_component_ready(&EMBEDDED_DENO_META, DENO_EXE);
+        let need_ffmpeg = !self.is_simple_component_ready(&EMBEDDED_FFMPEG_META, FFMPEG_MAIN);
 
         if need_ytdlp || need_deno || need_ffmpeg {
             {
@@ -212,12 +241,11 @@ impl BinManager {
 
             let root_clone = self.root_dir.clone();
             let app_clone = app.clone();
-            // Perform heavy zstd+tar extraction on a blocking thread with live progress updates
-            let manager_ptr = self as *const BinManager as usize;
+            // Perform heavy zstd+tar extraction on a blocking thread with live progress updates.
+            // The thread holds its own reference: it keeps running even if this future is dropped.
+            let mgr = Arc::clone(self);
 
             tokio::task::spawn_blocking(move || -> Result<(), String> {
-                let mgr = unsafe { &*(manager_ptr as *const BinManager) };
-
                 if need_ytdlp {
                     let target = root_clone
                         .join("ytdlp")
@@ -227,11 +255,11 @@ impl BinManager {
                         YTDLP_TAR_ZST,
                         &EMBEDDED_YTDLP_META,
                         &target,
-                        "yt-dlp.exe",
+                        YTDLP_EXE,
                         &tr!("Extraindo yt-dlp...", "Extracting yt-dlp...", "Extrayendo yt-dlp..."),
                         &mut extracted_so_far,
                         total_to_extract,
-                        mgr,
+                        &mgr,
                         app_clone.as_ref(),
                     )?;
                     let ytdlp_base = root_clone.join("ytdlp");
@@ -245,11 +273,11 @@ impl BinManager {
                         DENO_TAR_ZST,
                         &EMBEDDED_DENO_META,
                         &target,
-                        "deno.exe",
+                        DENO_EXE,
                         &tr!("Extraindo runtime Deno...", "Extracting the Deno runtime...", "Extrayendo el runtime de Deno..."),
                         &mut extracted_so_far,
                         total_to_extract,
-                        mgr,
+                        &mgr,
                         app_clone.as_ref(),
                     )?;
                 }
@@ -260,11 +288,11 @@ impl BinManager {
                         FFMPEG_TAR_ZST,
                         &EMBEDDED_FFMPEG_META,
                         &target,
-                        "ffmpeg.exe",
+                        FFMPEG_MAIN,
                         &tr!("Extraindo FFmpeg e FFprobe...", "Extracting FFmpeg and FFprobe...", "Extrayendo FFmpeg y FFprobe..."),
                         &mut extracted_so_far,
                         total_to_extract,
-                        mgr,
+                        &mgr,
                         app_clone.as_ref(),
                     )?;
                 }
@@ -293,7 +321,7 @@ impl BinManager {
                         .join("ytdlp")
                         .join("versions")
                         .join(s)
-                        .join("yt-dlp.exe")
+                        .join(YTDLP_EXE)
                         .is_file()
             });
 
@@ -347,7 +375,6 @@ impl BinManager {
             let text = format!("{stdout}\n{stderr}");
             caps.has_whisper = has_token(&text, "whisper");
             caps.has_rubberband = has_token(&text, "rubberband");
-            caps.has_soxr = has_token(&text, "aresample");
             caps.has_libass = has_token(&text, "subtitles") && has_token(&text, "ass");
             caps.has_loudnorm = has_token(&text, "loudnorm");
             caps.has_silenceremove = has_token(&text, "silenceremove");
@@ -355,6 +382,17 @@ impl BinManager {
             caps.has_showspectrumpic = has_token(&text, "showspectrumpic");
             caps.has_palettegen = has_token(&text, "palettegen") && has_token(&text, "paletteuse");
         }
+
+        // `aresample` exists in every build; the SoX resampler only when FFmpeg was built with it.
+        let soxr_test = [
+            "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "sine=duration=0.1",
+            "-af", "aresample=resampler=soxr", "-f", "null", "-",
+        ]
+        .map(OsString::from);
+        caps.has_soxr = matches!(
+            run_hidden_output(&ff, &soxr_test, ProcessPriority::BelowNormal).await,
+            Ok((0, _, _))
+        );
 
         if let Ok((_, stdout, stderr)) = run_hidden_output(
             &ff,
@@ -373,6 +411,9 @@ impl BinManager {
 
             // Section 8.2: Do NOT merely trust `-encoders` for GPU encoders; run a 0.1s test encode!
             let candidates = [
+                // Apple's own encoder on macOS (Apple Silicon and Intel).
+                "h264_videotoolbox",
+                "hevc_videotoolbox",
                 "h264_nvenc",
                 "hevc_nvenc",
                 "av1_nvenc",
@@ -520,7 +561,8 @@ impl BinManager {
         }
     }
 
-    /// Updates `yt-dlp` (unpackaged `yt-dlp_win.zip`), verifies `SHA2-256SUMS`, preserves previous version for rollback, and swaps atomically.
+    /// Updates `yt-dlp` with this system's release asset (`YTDLP_ASSET`), verifies `SHA2-256SUMS`,
+    /// preserves previous version for rollback, and swaps atomically.
     pub async fn update_ytdlp(
         &self,
         channel: &str,
@@ -562,8 +604,8 @@ impl BinManager {
         let zip_asset = rel
             .assets
             .iter()
-            .find(|a| a.name == "yt-dlp_win.zip")
-            .ok_or_else(|| tr!("Asset yt-dlp_win.zip não encontrado na release.", "yt-dlp_win.zip asset not found in the release.", "No se encontró yt-dlp_win.zip en la release."))?;
+            .find(|a| a.name == YTDLP_ASSET)
+            .ok_or_else(|| tr!("Asset {YTDLP_ASSET} não encontrado na release.", "{YTDLP_ASSET} asset not found in the release.", "No se encontró {YTDLP_ASSET} en la release."))?;
         let sums_asset = rel
             .assets
             .iter()
@@ -587,21 +629,21 @@ impl BinManager {
                 let mut parts = line.split_whitespace();
                 let hash = parts.next()?;
                 let fname = parts.next()?.trim_start_matches('*');
-                if fname == "yt-dlp_win.zip" {
+                if fname == YTDLP_ASSET {
                     Some(hash.to_ascii_lowercase())
                 } else {
                     None
                 }
             })
-            .ok_or_else(|| tr!("Hash do yt-dlp_win.zip ausente em SHA2-256SUMS.", "yt-dlp_win.zip hash missing from SHA2-256SUMS.", "Falta el hash de yt-dlp_win.zip en SHA2-256SUMS."))?;
+            .ok_or_else(|| tr!("Hash do {YTDLP_ASSET} ausente em SHA2-256SUMS.", "{YTDLP_ASSET} hash missing from SHA2-256SUMS.", "Falta el hash de {YTDLP_ASSET} en SHA2-256SUMS."))?;
 
         let zip_bytes = client
             .get(&zip_asset.browser_download_url)
             .send()
             .await
-            .map_err(|e| tr!("Falha baixando yt-dlp_win.zip: {e}", "Couldn't download yt-dlp_win.zip: {e}", "No se pudo descargar yt-dlp_win.zip: {e}"))?
+            .map_err(|e| tr!("Falha baixando {YTDLP_ASSET}: {e}", "Couldn't download {YTDLP_ASSET}: {e}", "No se pudo descargar {YTDLP_ASSET}: {e}"))?
             .error_for_status()
-            .map_err(|e| tr!("Erro HTTP baixando yt-dlp_win.zip: {e}", "HTTP error downloading yt-dlp_win.zip: {e}", "Error HTTP al descargar yt-dlp_win.zip: {e}"))?
+            .map_err(|e| tr!("Erro HTTP baixando {YTDLP_ASSET}: {e}", "HTTP error downloading {YTDLP_ASSET}: {e}", "Error HTTP al descargar {YTDLP_ASSET}: {e}"))?
             .bytes()
             .await
             .map_err(|e| format!("Download interrompido: {e}"))?;
@@ -618,6 +660,17 @@ impl BinManager {
         }
 
         let new_ver = rel.tag_name.clone();
+        // The tag names a folder: only plain version characters, never a path.
+        if new_ver.is_empty()
+            || new_ver.starts_with('.')
+            || !new_ver.bytes().all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_'))
+        {
+            return Err(tr!(
+                "Versão inválida na release do yt-dlp.",
+                "Invalid version in the yt-dlp release.",
+                "Versión no válida en la release de yt-dlp."
+            ));
+        }
         let versions_dir = self.root_dir.join("ytdlp").join("versions");
         let dest_dir = versions_dir.join(&new_ver);
         let tmp_dir = versions_dir.join(format!("{new_ver}.tmp-{}", std::process::id()));
@@ -630,6 +683,16 @@ impl BinManager {
                 let _ = fs::remove_dir_all(&tmp_clone);
             }
             fs::create_dir_all(&tmp_clone).map_err(|e| e.to_string())?;
+            // macOS: a single executable file.
+            if !YTDLP_ASSET.ends_with(".zip") {
+                let exe = tmp_clone.join(YTDLP_EXE);
+                fs::write(&exe, &zip_vec).map_err(|e| e.to_string())?;
+                set_unix_mode(&exe, 0o755)?;
+                if dest_clone.exists() {
+                    let _ = fs::remove_dir_all(&dest_clone);
+                }
+                return fs::rename(&tmp_clone, &dest_clone).map_err(|e| e.to_string());
+            }
             let cursor = std::io::Cursor::new(zip_vec);
             let mut archive = zip::ZipArchive::new(cursor).map_err(|e| e.to_string())?;
             for i in 0..archive.len() {
@@ -646,12 +709,19 @@ impl BinManager {
                     }
                     let mut out_file = File::create(&out_path).map_err(|e| e.to_string())?;
                     std::io::copy(&mut file, &mut out_file).map_err(|e| e.to_string())?;
+                    if let Some(mode) = file.unix_mode() {
+                        set_unix_mode(&out_path, mode)?;
+                    }
                 }
             }
 
-            // Locate folder containing yt-dlp.exe in case zip had a wrapper subdir
-            let actual_root = find_file_parent(&tmp_clone, "yt-dlp.exe")
-                .ok_or_else(|| tr!("yt-dlp.exe ausente no zip baixado.", "yt-dlp.exe missing from the downloaded zip.", "Falta yt-dlp.exe en el zip descargado."))?;
+            // Locate folder containing the executable in case zip had a wrapper subdir
+            let actual_root = find_file_parent(&tmp_clone, YTDLP_IN_ZIP)
+                .ok_or_else(|| tr!("Executável do yt-dlp ausente no zip baixado.", "The yt-dlp executable is missing from the downloaded zip.", "Falta el ejecutable de yt-dlp en el zip descargado."))?;
+            if YTDLP_IN_ZIP != YTDLP_EXE {
+                fs::rename(actual_root.join(YTDLP_IN_ZIP), actual_root.join(YTDLP_EXE)).map_err(|e| e.to_string())?;
+            }
+            set_unix_mode(&actual_root.join(YTDLP_EXE), 0o755)?;
 
             if dest_clone.exists() {
                 let _ = fs::remove_dir_all(&dest_clone);
@@ -697,7 +767,7 @@ impl BinManager {
         let prev_exe = ytdlp_base
             .join("versions")
             .join(&prev_ver)
-            .join("yt-dlp.exe");
+            .join(YTDLP_EXE);
         if !prev_exe.is_file() {
             return Err(tr!(
                 "Binário da versão anterior ({prev_ver}) não está mais no disco.",
@@ -805,6 +875,12 @@ fn extract_tar_zst_atomic(
                 };
                 mgr.state.write().progress_pct = pct.min(0.92);
                 mgr.emit_state(app);
+            }
+        }
+        // Linux and macOS: the executables keep the permission they were packed with.
+        if cfg!(unix) {
+            if let Ok(mode) = entry.header().mode() {
+                set_unix_mode(&out_path, mode)?;
             }
         }
     }
@@ -935,5 +1011,20 @@ mod tests {
             assert!(item.total_bytes > 1_000_000);
             assert!(item.compressed_bytes > 100_000);
         }
+    }
+}
+
+/// Applies Unix permissions (the executable bit) on Linux and macOS; nothing to do on Windows.
+fn set_unix_mode(path: &Path, mode: u32) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode & 0o7777))
+            .map_err(|e| format!("{}: {e}", path.display()))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (path, mode);
+        Ok(())
     }
 }

@@ -35,7 +35,9 @@ fn pack_component(
 ) -> (usize, u64, String, PathBuf) {
     if !src_dir.exists() {
         panic!(
-            "Diretório vendor/bin/{key} não encontrado em {}. Rode `powershell -File scripts/fetch-binaries.ps1` antes de compilar.",
+            "Motor {key} não encontrado em {}. Prepare os motores antes de compilar: \
+             `powershell -File scripts/fetch-binaries.ps1` no Windows, \
+             `python3 scripts/fetch-binaries.py` no Linux e no macOS.",
             src_dir.display()
         );
     }
@@ -122,8 +124,15 @@ fn pack_component(
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let repo_root = manifest_dir.parent().unwrap();
-    let vendor_manifest_path = repo_root.join("vendor").join("manifest.json");
-    let vendor_bin_dir = repo_root.join("vendor").join("bin");
+    // Windows keeps its engines in vendor/bin (scripts/fetch-binaries.ps1); Linux and macOS in
+    // vendor/bin/<target>, described by vendor/<target>.json (scripts/fetch-binaries.py).
+    let vendor = repo_root.join("vendor");
+    let target = env::var("TARGET").unwrap();
+    let (vendor_manifest_path, vendor_bin_dir) = if target.contains("windows") {
+        (vendor.join("manifest.json"), vendor.join("bin"))
+    } else {
+        (vendor.join(format!("{target}.json")), vendor.join("bin").join(&target))
+    };
 
     println!("cargo:rerun-if-changed={}", vendor_manifest_path.display());
     println!("cargo:rerun-if-changed={}", vendor_bin_dir.join("ytdlp").join(".version").display());
@@ -137,7 +146,8 @@ fn main() {
         )
     });
     let entries: BTreeMap<String, VendorEntry> =
-        serde_json::from_str(&raw_manifest).expect("vendor/manifest.json inválido");
+        serde_json::from_str(&raw_manifest)
+            .unwrap_or_else(|e| panic!("{} inválido: {e}", vendor_manifest_path.display()));
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let threads = std::thread::available_parallelism()
@@ -161,7 +171,7 @@ fn main() {
     for key in ["ytdlp", "deno", "ffmpeg"] {
         let entry = entries
             .get(key)
-            .unwrap_or_else(|| panic!("Componente {key} ausente em vendor/manifest.json"));
+            .unwrap_or_else(|| panic!("Componente {key} ausente em {}", vendor_manifest_path.display()));
         let src_dir = vendor_bin_dir.join(key);
         let (file_count, total_bytes, archive_sha, archive_path) =
             pack_component(key, &src_dir, entry, &out_dir, threads);
@@ -182,5 +192,25 @@ fn main() {
     fs::write(out_dir.join("embedded_manifest.rs"), generated)
         .expect("Falha escrevendo embedded_manifest.rs");
 
+    // Tauri embeds the Common Controls v6 manifest only in the binaries. Integration tests that
+    // reach Tauri code import `TaskDialogIndirect` too, and without the manifest Windows refuses
+    // to start them (STATUS_ENTRYPOINT_NOT_FOUND).
+    if env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
+        let test_manifest = out_dir.join("tests.manifest");
+        fs::write(&test_manifest, COMMON_CONTROLS_MANIFEST)
+            .expect("Falha escrevendo tests.manifest");
+        println!("cargo:rustc-link-arg-tests=/MANIFEST:EMBED");
+        println!("cargo:rustc-link-arg-tests=/MANIFESTINPUT:{}", test_manifest.display());
+    }
+
     tauri_build::build();
 }
+
+const COMMON_CONTROLS_MANIFEST: &str = r#"<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity type="win32" name="Microsoft.Windows.Common-Controls" version="6.0.0.0" processorArchitecture="*" publicKeyToken="6595b64144ccf1df" language="*" />
+    </dependentAssembly>
+  </dependency>
+</assembly>
+"#;

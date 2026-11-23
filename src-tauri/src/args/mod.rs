@@ -53,6 +53,9 @@ pub struct ExecContext {
     pub apply_anti_429_sleep: bool,
     pub impersonate_target: Option<String>,
     pub playlist_index_override: Option<u32>,
+    /// "Keep both" jobs: yt-dlp leaves the finished files in this folder of the job's own instead
+    /// of `spec.output_root`. Partial files stay in `<output_root>\.boladao-tmp`.
+    pub staging_dir: Option<PathBuf>,
 }
 
 /// Validates user-supplied extra arguments against forbidden options.
@@ -143,9 +146,10 @@ pub fn build_ytdlp_args(
         }
     }
 
-    // Output directories (temp on same disk as destination!) & Windows sanitization
-    let home_dir = &spec.output_root;
-    let temp_dir = home_dir.join(TEMP_SUBDIR_NAME);
+    // Output directories (temp on same disk as destination!) & Windows sanitization.
+    // Filenames are trimmed for the folder yt-dlp actually writes to, the job's own one included.
+    let home_dir = ctx.staging_dir.as_deref().unwrap_or(spec.output_root.as_path());
+    let temp_dir = spec.output_root.join(TEMP_SUBDIR_NAME);
     push2(&mut args, "--paths", &format!("home:{}", home_dir.display()));
     push2(&mut args, "--paths", &format!("temp:{}", temp_dir.display()));
 
@@ -156,7 +160,7 @@ pub fn build_ytdlp_args(
     };
     let mut tpl = canonical_template(&spec.output_template).replace("{tipo}", &kind_folder);
     if spec.playlist_numbering && !tpl.contains("{nn}") {
-        if let Some(idx) = tpl.rfind('\\').or_else(|| tpl.rfind('/')) {
+        if let Some(idx) = tpl.rfind(['\\', '/']) {
             let (prefix, rest) = tpl.split_at(idx + 1);
             tpl = format!("{prefix}{{nn}} - {rest}");
         } else {
@@ -507,6 +511,7 @@ pub fn format_equivalent_command(exe: &Path, args: &[OsString], redact_proxy_aut
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
     use crate::spec::builtin_presets;
 
     fn test_ctx() -> ExecContext {
@@ -520,9 +525,35 @@ mod tests {
             apply_anti_429_sleep: false,
             impersonate_target: None,
             playlist_index_override: None,
+            staging_dir: None,
         }
     }
 
+    #[test]
+    fn keep_both_downloads_into_the_job_folder_and_keeps_partial_files_in_the_root() {
+        let root = if cfg!(windows) { PathBuf::from(r"D:\Musica") } else { PathBuf::from("/media/Musica") };
+        let mut ctx = test_ctx();
+        ctx.staging_dir = Some(root.join(".boladao-tmp").join("1a2b3c4d"));
+        let spec = DownloadSpec {
+            output_root: root.clone(),
+            ..Default::default()
+        };
+        let args: Vec<String> = build_ytdlp_args("https://www.youtube.com/watch?v=x", &spec, &ctx)
+            .unwrap()
+            .into_iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+
+        // An existing file in the destination is out of yt-dlp's sight, so it never skips the download.
+        let home = format!("home:{}", root.join(".boladao-tmp").join("1a2b3c4d").display());
+        assert!(args.contains(&home), "{args:?}");
+        // Partial files stay where earlier versions left them, so paused downloads still resume.
+        let temp = format!("temp:{}", root.join(".boladao-tmp").display());
+        assert!(args.contains(&temp), "{args:?}");
+    }
+
+    // The snapshots hold the exact Windows argument lists (backslashes, MAX_PATH trimming).
+    #[cfg(windows)]
     #[test]
     fn snapshots_all_builtin_presets() {
         let music = PathBuf::from(r"C:\Users\leo\Music\Boladão");
@@ -545,6 +576,7 @@ mod tests {
         insta::assert_yaml_snapshot!("builtin_presets_args", rendered);
     }
 
+    #[cfg(windows)]
     #[test]
     fn snapshots_rich_extras_combination() {
         let mut ctx = test_ctx();
@@ -606,8 +638,32 @@ mod tests {
         assert_eq!(output_of("{type}\\{artist}\\{track}", MediaMode::Audio), original);
         assert_eq!(output_of("{tipo}\\{artista}\\{pista}", MediaMode::Audio), original);
         // `{tipo}` is the media folder itself, not a yt-dlp field that never exists.
-        assert!(original.starts_with("Música\\"), "{original}");
-        assert!(output_of("{tipo}\\{titulo}", MediaMode::Video).starts_with("Vídeos\\"));
+        let sep = std::path::MAIN_SEPARATOR;
+        assert!(original.starts_with(&format!("Música{sep}")), "{original}");
+        assert!(output_of("{tipo}\\{titulo}", MediaMode::Video).starts_with(&format!("Vídeos{sep}")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_paths_use_slashes_and_names_fit_in_255_bytes() {
+        let spec = DownloadSpec {
+            output_root: PathBuf::from("/home/ana/Música/Boladão"),
+            output_template: "{artista}\\{album}\\{faixa}".to_string(),
+            ..Default::default()
+        };
+        let args: Vec<String> = build_ytdlp_args("https://www.youtube.com/watch?v=x", &spec, &test_ctx())
+            .unwrap()
+            .into_iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        let after = |flag: &str| args[args.iter().position(|a| a == flag).unwrap() + 1].clone();
+        assert_eq!(
+            after("--output"),
+            "%(artist,creator,uploader,channel|Artista)s/%(album,playlist_title|Singles)s/%(track,title|Faixa)s.%(ext)s"
+        );
+        assert!(args.contains(&"home:/home/ana/Música/Boladão".to_string()), "{args:?}");
+        assert!(args.contains(&"temp:/home/ana/Música/Boladão/.boladao-tmp".to_string()), "{args:?}");
+        assert_eq!(after("--trim-filenames"), "80");
     }
 
     #[test]

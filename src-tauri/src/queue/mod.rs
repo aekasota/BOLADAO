@@ -3,7 +3,9 @@ use crate::bins::BinManager;
 use crate::classify::{classify_url, normalize_url_for_dedup, SourceKind};
 use crate::cookies::prepare_cookie_source;
 use crate::gamemode::GameModeMonitor;
-use crate::job::{execute_job_pipeline, ActiveJobHandle, Job, JobState, Progress, SourceMeta};
+use crate::job::{
+    execute_job_pipeline, staging_dir, ActiveJobHandle, Job, JobState, Progress, SourceMeta,
+};
 use crate::library::{analyze_completed_file, LibraryEntry, LibraryStore};
 use crate::limiter::BandwidthLimiter;
 use crate::paths::{app_config_dir, cleanup_stale_temp_dirs, TEMP_SUBDIR_NAME};
@@ -390,6 +392,10 @@ impl QueueManager {
                     j.finished_at = Some(Utc::now());
                 }
             });
+            // Nothing runs for this job any more; a running one clears its folder on the way out.
+            if let Some(root) = &root_to_clean {
+                let _ = fs::remove_dir_all(staging_dir(id, root));
+            }
         }
 
         // Clean the canceled job's temporary files without touching partial downloads of other jobs
@@ -693,6 +699,7 @@ impl QueueManager {
             apply_anti_429_sleep: large_playlist,
             impersonate_target: None,
             playlist_index_override: job_with_globals.playlist_index,
+            staging_dir: None,
         };
 
         let ws_prio = if gm_active {

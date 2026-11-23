@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { MOD_KEY } from "../../lib/platform";
 import { AnimatePresence, motion } from "motion/react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
@@ -1720,16 +1721,19 @@ export const DownloadTab: React.FC<{
                       </div>
 
                       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
-                        <Toggle
-                          checked={spec.workshop.trim_silence}
-                          onChange={(v) =>
-                            setSpec({
-                              ...spec,
-                              workshop: { ...spec.workshop, trim_silence: v },
-                            })
-                          }
-                          label={t.download.trimSilence}
-                        />
+                        {/* Trimming only the soundtrack would push a video out of sync. */}
+                        {spec.mode === "audio" && (
+                          <Toggle
+                            checked={spec.workshop.trim_silence}
+                            onChange={(v) =>
+                              setSpec({
+                                ...spec,
+                                workshop: { ...spec.workshop, trim_silence: v },
+                              })
+                            }
+                            label={t.download.trimSilence}
+                          />
+                        )}
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ fontSize: 12, color: "var(--text-2)" }}>{t.download.speed}</span>
                           {[null, 0.75, 1.25, 1.5, 2.0].map((spd) => (
@@ -1884,7 +1888,7 @@ export const DownloadTab: React.FC<{
                   {/* Primary Action Buttons */}
                   <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", alignItems: "center" }}>
                     <span style={{ fontSize: 11, color: "var(--text-3)", marginRight: "auto" }}>
-                      <Kbd>Enter</Kbd> {t.download.kbdQueue} · <Kbd>Ctrl+Enter</Kbd> {t.download.kbdNow}
+                      <Kbd>Enter</Kbd> {t.download.kbdQueue} · <Kbd>{MOD_KEY}+Enter</Kbd> {t.download.kbdNow}
                     </span>
                     <Button
                       variant="secondary"

@@ -10,6 +10,7 @@ pub const BELOW_NORMAL_PRIORITY_FLAG: u32 = 0x0000_4000;
 pub const IDLE_PRIORITY_FLAG: u32 = 0x0000_0040;
 /// Starts the child with its main thread suspended, so it cannot run (or spawn grandchildren)
 /// before it is inside the Job Object.
+#[cfg(windows)]
 const CREATE_SUSPENDED_FLAG: u32 = 0x0000_0004;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,14 +26,35 @@ impl ProcessPriority {
             ProcessPriority::Idle => IDLE_PRIORITY_FLAG,
         }
     }
+
+    /// `nice` value on Linux and macOS: below normal is a little lower, idle the lowest.
+    #[cfg(unix)]
+    fn nice(self) -> libc::c_int {
+        match self {
+            ProcessPriority::BelowNormal => 5,
+            ProcessPriority::Idle => 19,
+        }
+    }
 }
 
-/// RAII wrapper around a Windows Job Object configured with
-/// `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. Dropping or calling `terminate()`
-/// kills the entire process tree (e.g. `yt-dlp.exe` + `ffmpeg.exe` + `deno.exe`).
+/// The processes of one download, killed together on cancel, pause or exit.
+///
+/// On Windows it is a Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`: dropping it or
+/// calling `terminate()` kills the whole tree (`yt-dlp.exe` + `ffmpeg.exe` + `deno.exe`). On
+/// Linux and macOS every child starts its own process group, which takes in whatever it spawns,
+/// and `terminate()` kills those groups.
 pub struct JobGroup {
     #[cfg(windows)]
     handle: isize,
+    #[cfg(unix)]
+    groups: parking_lot::Mutex<UnixGroups>,
+}
+
+#[cfg(unix)]
+#[derive(Default)]
+struct UnixGroups {
+    pgids: Vec<libc::pid_t>,
+    terminated: bool,
 }
 
 unsafe impl Send for JobGroup {}
@@ -73,9 +95,11 @@ impl JobGroup {
             })
         }
 
-        #[cfg(not(windows))]
+        #[cfg(unix)]
         {
-            Ok(Self {})
+            Ok(Self {
+                groups: parking_lot::Mutex::new(UnixGroups::default()),
+            })
         }
     }
 
@@ -92,14 +116,31 @@ impl JobGroup {
             Ok(())
         }
 
-        #[cfg(not(windows))]
+        #[cfg(unix)]
         {
-            let _ = child;
+            // The child was started with `process_group(0)`: its group id is its pid.
+            let pid = child.id().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::Other, tr!("o processo já foi encerrado", "the process has already ended", "el proceso ya terminó"))
+            })? as libc::pid_t;
+            let mut groups = self.groups.lock();
+            if groups.terminated {
+                // A cancel or pause arrived while the child was starting.
+                // SAFETY: plain syscall; a negative pid addresses the child's own group.
+                unsafe { libc::kill(-pid, libc::SIGKILL) };
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    tr!("o download foi interrompido", "the download was stopped", "la descarga se detuvo"),
+                ));
+            }
+            // Groups whose processes all ended are dropped, so their ids are never reused here.
+            // SAFETY: signal 0 only checks that the group still exists.
+            groups.pgids.retain(|&g| unsafe { libc::kill(-g, 0) } == 0);
+            groups.pgids.push(pid);
             Ok(())
         }
     }
 
-    /// Terminates every process inside this Job Object immediately.
+    /// Terminates every process of this download immediately.
     pub fn terminate(&self) {
         #[cfg(windows)]
         unsafe {
@@ -108,11 +149,23 @@ impl JobGroup {
                 let _ = TerminateJobObject(self.handle as *mut _, 1);
             }
         }
+        #[cfg(unix)]
+        {
+            let mut groups = self.groups.lock();
+            groups.terminated = true;
+            for pgid in groups.pgids.drain(..) {
+                // SAFETY: plain syscall; a negative pid addresses the whole process group.
+                unsafe { libc::kill(-pgid, libc::SIGKILL) };
+            }
+        }
     }
 }
 
 impl Drop for JobGroup {
     fn drop(&mut self) {
+        // Same as closing the Job Object on Windows: nothing of this download outlives it.
+        #[cfg(unix)]
+        self.terminate();
         #[cfg(windows)]
         unsafe {
             use windows_sys::Win32::Foundation::CloseHandle;
@@ -153,6 +206,25 @@ where
     {
         cmd.creation_flags(CREATE_NO_WINDOW_FLAG | priority.creation_flag());
     }
+    #[cfg(unix)]
+    {
+        let nice = priority.nice();
+        let background = priority == ProcessPriority::Idle;
+        // SAFETY: only async-signal-safe calls run between fork and exec.
+        unsafe {
+            cmd.pre_exec(move || {
+                libc::setpriority(libc::PRIO_PROCESS, 0, nice);
+                // macOS also slows the disk and network of a background process.
+                #[cfg(target_os = "macos")]
+                if background {
+                    libc::setpriority(libc::PRIO_DARWIN_PROCESS, 0, libc::PRIO_DARWIN_BG);
+                }
+                #[cfg(not(target_os = "macos"))]
+                let _ = background;
+                Ok(())
+            });
+        }
+    }
 
     cmd
 }
@@ -178,6 +250,9 @@ where
     {
         cmd.creation_flags(CREATE_NO_WINDOW_FLAG | priority.creation_flag() | CREATE_SUSPENDED_FLAG);
     }
+    // Its own process group, so killing the group also reaches FFmpeg and Deno started by yt-dlp.
+    #[cfg(unix)]
+    cmd.process_group(0);
     let mut child = cmd.spawn()?;
 
     let bound = job.assign_child(&child).and_then(|_| resume_main_thread(&child));
@@ -186,14 +261,14 @@ where
         if !matches!(child.try_wait(), Ok(Some(_))) {
             let _ = child.start_kill();
         }
-        tracing_or_log(&format!("Processo encerrado: não entrou no Job Object ({err})"));
+        tracing_or_log(&format!("Processo encerrado: não entrou no grupo do download ({err})"));
         return Err(io::Error::new(
             err.kind(),
             tr!(
-                    "não foi possível isolar o processo no Job Object do Windows: {err}",
-                    "couldn't isolate the process in a Windows Job Object: {err}",
-                    "no se pudo aislar el proceso en un Job Object de Windows: {err}"
-                ),
+                "não foi possível isolar o processo do download: {err}",
+                "couldn't isolate the download process: {err}",
+                "no se pudo aislar el proceso de la descarga: {err}"
+            ),
         ));
     }
     Ok(child)
@@ -264,9 +339,11 @@ pub fn set_child_priority(child: &Child, priority: ProcessPriority) {
             let _ = SetPriorityClass(raw as *mut _, priority.creation_flag());
         }
     }
-    #[cfg(not(windows))]
-    {
-        let _ = (child, priority);
+    // Lowering always works; raising it back needs privileges, so it may stay low until the end.
+    #[cfg(unix)]
+    if let Some(pid) = child.id() {
+        // SAFETY: plain syscall on a pid this app started.
+        unsafe { libc::setpriority(libc::PRIO_PROCESS, pid as libc::id_t, priority.nice()) };
     }
 }
 
@@ -285,7 +362,8 @@ pub async fn run_hidden_output(
     Ok((code, stdout, stderr))
 }
 
-/// Enumerates currently running `.exe` process names on Windows (for Game Mode detection and UI picker).
+/// Names of the running programs, for Game Mode detection and its picker: the `.exe` files on
+/// Windows, the executable names on Linux (games under Proton show up as their `.exe`) and macOS.
 pub fn list_running_exe_names() -> Vec<String> {
     #[cfg(windows)]
     unsafe {
@@ -324,9 +402,49 @@ pub fn list_running_exe_names() -> Vec<String> {
         set.into_iter().collect()
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     {
-        Vec::new()
+        let mut set = BTreeSet::new();
+        let Ok(entries) = std::fs::read_dir("/proc") else {
+            return Vec::new();
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            if !name.to_string_lossy().bytes().all(|b| b.is_ascii_digit()) {
+                continue;
+            }
+            // argv[0] keeps the full name (`comm` stops at 15 characters); Wine passes Windows paths.
+            let from_cmdline = std::fs::read(entry.path().join("cmdline")).ok().and_then(|raw| {
+                let argv0 = raw.split(|&b| b == 0).next()?;
+                let argv0 = String::from_utf8_lossy(argv0);
+                let base = argv0.rsplit(['/', '\\']).next()?.trim().to_string();
+                (!base.is_empty()).then_some(base)
+            });
+            let name = from_cmdline.or_else(|| {
+                std::fs::read_to_string(entry.path().join("comm"))
+                    .ok()
+                    .map(|c| c.trim().to_string())
+                    .filter(|c| !c.is_empty())
+            });
+            if let Some(name) = name {
+                set.insert(name);
+            }
+        }
+        set.into_iter().collect()
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let Ok(output) = std::process::Command::new("/bin/ps").args(["-axo", "comm="]).output() else {
+            return Vec::new();
+        };
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(|line| Some(Path::new(line.trim()).file_name()?.to_string_lossy().into_owned()))
+            .filter(|name| !name.is_empty())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
     }
 }
 
@@ -460,5 +578,69 @@ mod tests {
         .unwrap();
         assert!(out.status.success());
         assert!(!String::from_utf8_lossy(&out.stdout).trim().is_empty());
+    }
+}
+
+#[cfg(all(test, unix))]
+mod unix_tests {
+    use super::*;
+    use std::path::PathBuf;
+    use std::time::Duration;
+
+    fn group_alive(pgid: libc::pid_t) -> bool {
+        // SAFETY: signal 0 only checks that the group exists.
+        unsafe { libc::kill(-pgid, 0) == 0 }
+    }
+
+    #[tokio::test]
+    async fn terminate_kills_the_child_and_what_it_started() {
+        let job = JobGroup::new().unwrap();
+        // The shell starts a grandchild, like yt-dlp starting FFmpeg.
+        let mut child = spawn_in_job(
+            &job,
+            &PathBuf::from("/bin/sh"),
+            ["-c", "sleep 30 & wait"],
+            ProcessPriority::BelowNormal,
+            None,
+        )
+        .unwrap();
+        let pgid = child.id().unwrap() as libc::pid_t;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(group_alive(pgid));
+
+        job.terminate();
+        let exited = tokio::time::timeout(Duration::from_secs(5), child.wait()).await;
+        assert!(exited.is_ok(), "o processo sobreviveu ao cancelamento");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(!group_alive(pgid), "o neto continuou rodando depois do cancelamento");
+    }
+
+    #[tokio::test]
+    async fn a_child_started_after_terminate_never_runs() {
+        let job = JobGroup::new().unwrap();
+        job.terminate();
+        let spawned = spawn_in_job(
+            &job,
+            &PathBuf::from("/bin/sleep"),
+            ["30"],
+            ProcessPriority::Idle,
+            None,
+        );
+        assert!(spawned.is_err());
+    }
+
+    #[tokio::test]
+    async fn short_commands_run_to_completion() {
+        let (code, stdout, _) =
+            run_hidden_output(&PathBuf::from("/bin/echo"), &["boladão".into()], ProcessPriority::BelowNormal)
+                .await
+                .unwrap();
+        assert_eq!(code, 0);
+        assert_eq!(stdout.trim(), "boladão");
+    }
+
+    #[test]
+    fn lists_running_programs() {
+        assert!(!list_running_exe_names().is_empty());
     }
 }

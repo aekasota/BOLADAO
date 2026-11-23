@@ -41,6 +41,7 @@ import {
   Toggle,
 } from "../../ui/Primitives";
 import { formatDate, formatDecimal, useT } from "../../i18n";
+import { forPlatform } from "../../lib/platform";
 
 const ACCOUNT_PLATFORMS = [
   { id: "youtube", name: "YouTube / YouTube Music", slug: "youtube", color: "#FF0033" },
@@ -507,7 +508,7 @@ export const SettingsTab: React.FC = () => {
                 <div style={{ display: "flex", gap: 8 }}>
                   <input
                     className="op-input font-mono-num"
-                    placeholder={t.settings.gamemode.exePlaceholder}
+                    placeholder={forPlatform(t.settings.gamemode.exePlaceholder)}
                     value={newGameExe}
                     onChange={(e) => setNewGameExe(e.target.value)}
                     style={{ height: 34, padding: "0 10px", flex: 1 }}
@@ -583,13 +584,13 @@ export const SettingsTab: React.FC = () => {
                 <AlertTriangle size={16} color="var(--warn)" style={{ marginTop: 2, flexShrink: 0 }} />
                 <div>
                   <strong style={{ color: "var(--warn)" }}>{t.settings.accounts.youtubeWarnTitle}</strong>{" "}
-                  {t.settings.accounts.youtubeWarnBody} <strong>Firefox</strong>{" "}
+                  {forPlatform(t.settings.accounts.youtubeWarnBody)} <strong>Firefox</strong>{" "}
                   {t.settings.accounts.youtubeWarnOr} <code className="font-mono-num">cookies.txt</code>.
                 </div>
               </div>
 
               <div style={{ fontSize: 12.5, color: "var(--text-2)" }}>
-                {t.settings.accounts.cookiesNote}
+                {forPlatform(t.settings.accounts.cookiesNote)}
               </div>
 
               {accountMsg && (

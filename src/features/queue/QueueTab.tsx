@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { forPlatform } from "../../lib/platform";
 import { AnimatePresence, motion } from "motion/react";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import {
@@ -206,7 +207,7 @@ export const QueueTab: React.FC = () => {
               <div
                 title={
                   job.state === "done" && primaryOut
-                    ? t.queue.dragOut
+                    ? forPlatform(t.queue.dragOut)
                     : t.queue.dragReorder
                 }
                 onMouseDown={(e) => {

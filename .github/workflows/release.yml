@@ -1,0 +1,171 @@
+name: Release (Linux e macOS)
+
+# The Windows installer is built and signed locally (scripts/build-installer.ps1) and goes up with
+# `gh release create`. Once the release is published, this workflow builds the Linux (AppImage and
+# .deb) and macOS (universal .dmg) packages and attaches them to the same release.
+#
+# Automatic updates: with the TAURI_SIGNING_PRIVATE_KEY secret set (the contents of the same
+# updater.key that signs the Windows installer), each package is signed and the release also gets
+# latest-linux-x86_64.json and latest-macos.json. Without it, the packages still go up, but the
+# apps installed from them do not update themselves.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of an existing release (for example, v1.3.0)
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  CARGO_PROFILE_RELEASE_LTO: thin
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev file
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Cache engines
+        uses: actions/cache@v4
+        with:
+          path: |
+            vendor/cache
+            vendor/bin/x86_64-unknown-linux-gnu
+          key: engines-linux-${{ hashFiles('vendor/x86_64-unknown-linux-gnu.json', 'scripts/fetch-binaries.py') }}
+
+      - name: Engines (pinned versions, checksums verified)
+        run: python3 scripts/fetch-binaries.py x86_64-unknown-linux-gnu
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Build AppImage and .deb
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          NO_STRIP: true
+        run: npx tauri build --bundles appimage,deb
+
+      - name: Name the packages
+        run: |
+          mkdir -p out
+          cp src-tauri/target/release/bundle/appimage/*.AppImage out/Boladao-linux-x86_64.AppImage
+          cp src-tauri/target/release/bundle/deb/*.deb out/Boladao-linux-amd64.deb
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" out/* --clobber
+
+      # After the packages, so a signing problem never keeps them off the release, and the
+      # manifest only appears once the file it points to is there.
+      - name: Sign for automatic updates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "Sem TAURI_SIGNING_PRIVATE_KEY: pacotes sem atualização automática."
+            exit 0
+          fi
+          # A key saved with a line break at the end is no longer valid base64.
+          TAURI_SIGNING_PRIVATE_KEY="$(printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" | tr -d '\r\n ')"
+          export TAURI_SIGNING_PRIVATE_KEY
+          npx tauri signer sign out/Boladao-linux-x86_64.AppImage > /dev/null
+          node scripts/update-manifest.mjs "$TAG" Boladao-linux-x86_64.AppImage out/Boladao-linux-x86_64.AppImage.sig out/latest-linux-x86_64.json
+          gh release upload "$TAG" out/latest-linux-x86_64.json --clobber
+
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 150
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # FFmpeg is compiled from its sources for each architecture; the cache saves that work.
+      - name: Cache engines
+        uses: actions/cache@v4
+        with:
+          path: |
+            vendor/cache
+            vendor/bin/aarch64-apple-darwin
+            vendor/bin/x86_64-apple-darwin
+          key: engines-macos-${{ hashFiles('vendor/*-apple-darwin.json', 'vendor/ffmpeg-sources.json', 'scripts/fetch-binaries.py', 'scripts/build-ffmpeg-macos.sh') }}
+
+      - name: Engines for Apple Silicon and Intel
+        run: |
+          python3 scripts/fetch-binaries.py aarch64-apple-darwin
+          python3 scripts/fetch-binaries.py x86_64-apple-darwin
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Build the universal app and .dmg
+        run: npx tauri build --target universal-apple-darwin --bundles app,dmg
+
+      - name: Name the packages
+        run: |
+          mkdir -p out
+          bundle=src-tauri/target/universal-apple-darwin/release/bundle
+          cp "$bundle"/dmg/*.dmg out/Boladao-macos.dmg
+          tar -czf out/Boladao-macos.app.tar.gz -C "$bundle/macos" "$(ls "$bundle/macos")"
+
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" out/* --clobber
+
+      - name: Sign for automatic updates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "Sem TAURI_SIGNING_PRIVATE_KEY: pacotes sem atualização automática."
+            exit 0
+          fi
+          TAURI_SIGNING_PRIVATE_KEY="$(printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" | tr -d '\r\n ')"
+          export TAURI_SIGNING_PRIVATE_KEY
+          npx tauri signer sign out/Boladao-macos.app.tar.gz > /dev/null
+          node scripts/update-manifest.mjs "$TAG" Boladao-macos.app.tar.gz out/Boladao-macos.app.tar.gz.sig out/latest-macos.json
+          gh release upload "$TAG" out/latest-macos.json --clobber

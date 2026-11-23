@@ -32,7 +32,7 @@ export const en: Messages = {
     freeDisk: (size: string) => `${size} free`,
     language: {
       title: "Language",
-      followWindows: "Follow the Windows language",
+      followSystem: (os: string) => `Follow the ${os} language`,
       chipAria: (name: string) => `Language: ${name}. Change language`,
     },
     authorLink: "Open @aekasota on GitHub",
@@ -55,7 +55,11 @@ export const en: Messages = {
   },
   queue: {
     playlistFallback: "Playlist",
-    dragOut: "Drag out (Explorer, Premiere, DAW)",
+    dragOut: {
+      windows: "Drag out (Explorer, Premiere, DAW)",
+      macos: "Drag out (Finder, Final Cut, DAW)",
+      linux: "Drag out (file manager, editor, DAW)",
+    },
     dragReorder: "Drag to reorder the queue",
     failedFallback: "Download failed",
     eta: (eta: string) => `ETA ${eta}`,
@@ -266,18 +270,34 @@ export const en: Messages = {
       autoToggle: "Turn on automatically when a game or full-screen app opens",
       exeList: "Executables that turn on Game Mode",
       clickToRemove: "Click to remove",
-      exePlaceholder: "E.g.: cyberpunk2077.exe",
+      exePlaceholder: {
+        windows: "E.g.: cyberpunk2077.exe",
+        macos: "E.g.: Cyberpunk2077",
+        linux: "E.g.: cs2 or cyberpunk2077.exe (Proton)",
+      },
       add: "Add",
       runningNow: "Running now (click to add):",
     },
     accounts: {
       title: "Accounts and cookies",
       youtubeWarnTitle: "About YouTube:",
-      youtubeWarnBody:
-        "Using a signed-in account with yt-dlp may lead to restrictions on that account. Use it only when needed (age restrictions, members-only), preferably with a secondary account. Chrome and Edge (v127+) use app-bound encryption on Windows, so for YouTube prefer",
+      youtubeWarnBody: {
+        windows:
+          "Using a signed-in account with yt-dlp may lead to restrictions on that account. Use it only when needed (age restrictions, members-only), preferably with a secondary account. Chrome and Edge (v127+) use app-bound encryption on Windows, so for YouTube prefer",
+        macos:
+          "Using a signed-in account with yt-dlp may lead to restrictions on that account. Use it only when needed (age restrictions, members-only), preferably with a secondary account. For YouTube, prefer",
+        linux:
+          "Using a signed-in account with yt-dlp may lead to restrictions on that account. Use it only when needed (age restrictions, members-only), preferably with a secondary account. For YouTube, prefer",
+      },
       youtubeWarnOr: "or importing a",
-      cookiesNote:
-        "Cookies work like a password. Boladão keeps yours encrypted by Windows (DPAPI), tied to your user account, and only decrypts them into a temporary file while yt-dlp runs.",
+      cookiesNote: {
+        windows:
+          "Cookies work like a password. Boladão keeps yours encrypted by Windows (DPAPI), tied to your user account, and only decrypts them into a temporary file while yt-dlp runs.",
+        macos:
+          "Cookies work like a password. Boladão keeps yours in the macOS Keychain and only puts them in a temporary file while yt-dlp runs.",
+        linux:
+          "Cookies work like a password. Boladão keeps yours in the system keyring (GNOME Keyring or KWallet) or, without one, in a file only your account can read, and only puts them in a temporary file while yt-dlp runs.",
+      },
       connected: (detail: string) => `Connected (${detail})`,
       cookieCount: (n: number) => `${n} cookies`,
       importedCount: (n: number) => `cookies.txt · ${n} cookies`,

@@ -427,15 +427,17 @@ async fn connect_tuned_upstream(host: &str, port: u16) -> io::Result<TcpStream> 
         let _ = sock.set_nodelay(true);
         sock.set_nonblocking(true)?;
 
+        // A non-blocking connect reports "in progress": WSAEWOULDBLOCK (10035) on Windows,
+        // EINPROGRESS on Linux (115) and macOS (36).
+        #[cfg(windows)]
+        let connect_pending = 10035;
+        #[cfg(unix)]
+        let connect_pending = libc::EINPROGRESS;
         match sock.connect(&addr.into()) {
             Ok(()) => {}
             Err(err)
-                if err.raw_os_error() == Some(10035)
-                    || err.raw_os_error() == Some(115)
-                    || err.kind() == io::ErrorKind::WouldBlock =>
-            {
-                // WSAEWOULDBLOCK (10035) is expected for non-blocking connect on Windows
-            }
+                if err.raw_os_error() == Some(connect_pending)
+                    || err.kind() == io::ErrorKind::WouldBlock => {}
             Err(err) => {
                 last_err = err;
                 continue;

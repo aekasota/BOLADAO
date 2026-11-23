@@ -49,10 +49,13 @@ pub fn webview_profiles_dir() -> PathBuf {
     dir
 }
 
-// Session cookies work like passwords. They are stored as `<platform>.cookies`, encrypted with the
-// Windows Data Protection API (DPAPI, bound to the current Windows user), so a copied folder or a
-// backup of it is useless elsewhere. yt-dlp only reads plaintext Netscape files, so a copy lives in
-// `cookies\run\` strictly while a yt-dlp process runs (see `CookieLease`).
+// Session cookies work like passwords. On Windows they are stored as `<platform>.cookies`, encrypted
+// with the Windows Data Protection API (DPAPI, bound to the current Windows user), so a copied folder
+// or a backup of it is useless elsewhere. On macOS they go to the Keychain and on Linux to the
+// Secret Service (GNOME Keyring, KWallet); a Linux without one keeps `<platform>.cookies` readable
+// only by the user. yt-dlp only reads plaintext Netscape files, so a copy lives in `cookies/run/`
+// strictly while a yt-dlp process runs (see `CookieLease`).
+#[cfg(windows)]
 const DPAPI_ENTROPY: &[u8] = b"Boladao/cookies/v1";
 
 fn account_key(platform_id: &str) -> &str {
@@ -76,19 +79,42 @@ fn run_dir(dir: &Path) -> PathBuf {
     dir.join("run")
 }
 
+/// Writes `contents` to `path` through a temporary file in `dir`. On Linux and macOS the file is
+/// readable only by this user from the moment it exists.
+fn write_private_file(dir: &Path, path: &Path, contents: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    fs::create_dir_all(dir)?;
+    let tmp = dir.join(format!(".{}.tmp", Uuid::new_v4().simple()));
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let written = options
+        .open(&tmp)
+        .and_then(|mut file| file.write_all(contents))
+        .and_then(|_| fs::rename(&tmp, path));
+    if written.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    written
+}
+
+fn save_error(e: std::io::Error) -> String {
+    tr!("Erro salvando cookies: {e}", "Error saving cookies: {e}", "Error al guardar las cookies: {e}")
+}
+
+#[cfg(windows)]
 fn save_store_in(dir: &Path, key: &str, plaintext: &str) -> Result<(), String> {
     let blob = dpapi_protect(plaintext.as_bytes())?;
-    fs::create_dir_all(dir).map_err(|e| tr!("Erro criando a pasta de cookies: {e}", "Error creating the cookies folder: {e}", "Error al crear la carpeta de cookies: {e}"))?;
-    let tmp = dir.join(format!("{key}.{}.tmp", Uuid::new_v4().simple()));
-    fs::write(&tmp, blob).map_err(|e| tr!("Erro salvando cookies: {e}", "Error saving cookies: {e}", "Error al guardar las cookies: {e}"))?;
-    fs::rename(&tmp, store_file(dir, key)).map_err(|e| {
-        let _ = fs::remove_file(&tmp);
-        tr!("Erro salvando cookies: {e}", "Error saving cookies: {e}", "Error al guardar las cookies: {e}")
-    })?;
+    write_private_file(dir, &store_file(dir, key), &blob).map_err(save_error)?;
     let _ = fs::remove_file(legacy_file(dir, key));
     Ok(())
 }
 
+#[cfg(windows)]
 fn load_store_in(dir: &Path, key: &str) -> Option<String> {
     if let Ok(blob) = fs::read(store_file(dir, key)) {
         return dpapi_unprotect(&blob).ok().and_then(|plain| String::from_utf8(plain).ok());
@@ -96,6 +122,57 @@ fn load_store_in(dir: &Path, key: &str) -> Option<String> {
     let legacy = fs::read_to_string(legacy_file(dir, key)).ok()?;
     let _ = save_store_in(dir, key, &legacy);
     Some(legacy)
+}
+
+#[cfg(windows)]
+fn forget_store(dir: &Path, key: &str) {
+    let _ = fs::remove_file(store_file(dir, key));
+}
+
+#[cfg(all(not(windows), not(test)))]
+const KEYCHAIN_SERVICE: &str = "br.boladao.desktop.cookies";
+
+/// The account's item in the system keychain. Tests never touch the real one.
+#[cfg(all(not(windows), not(test)))]
+fn keychain_entry(key: &str) -> Option<keyring::Entry> {
+    keyring::Entry::new(KEYCHAIN_SERVICE, key).ok()
+}
+
+#[cfg(all(not(windows), test))]
+fn keychain_entry(_key: &str) -> Option<keyring::Entry> {
+    None
+}
+
+#[cfg(not(windows))]
+fn save_store_in(dir: &Path, key: &str, plaintext: &str) -> Result<(), String> {
+    if keychain_entry(key).is_some_and(|entry| entry.set_password(plaintext).is_ok()) {
+        let _ = fs::remove_file(store_file(dir, key));
+    } else {
+        write_private_file(dir, &store_file(dir, key), plaintext.as_bytes()).map_err(save_error)?;
+    }
+    let _ = fs::remove_file(legacy_file(dir, key));
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn load_store_in(dir: &Path, key: &str) -> Option<String> {
+    if let Some(secret) = keychain_entry(key).and_then(|entry| entry.get_password().ok()) {
+        return Some(secret);
+    }
+    if let Ok(saved) = fs::read_to_string(store_file(dir, key)) {
+        return Some(saved);
+    }
+    let legacy = fs::read_to_string(legacy_file(dir, key)).ok()?;
+    let _ = save_store_in(dir, key, &legacy);
+    Some(legacy)
+}
+
+#[cfg(not(windows))]
+fn forget_store(dir: &Path, key: &str) {
+    if let Some(entry) = keychain_entry(key) {
+        let _ = entry.delete_credential();
+    }
+    let _ = fs::remove_file(store_file(dir, key));
 }
 
 fn migrate_legacy_in(dir: &Path) {
@@ -135,9 +212,8 @@ impl CookieLease {
     fn open_in(dir: &Path, key: &str) -> Option<Self> {
         let plaintext = load_store_in(dir, key)?;
         let run = run_dir(dir);
-        fs::create_dir_all(&run).ok()?;
         let path = run.join(format!("{key}-{}.txt", Uuid::new_v4().simple()));
-        fs::write(&path, &plaintext).ok()?;
+        write_private_file(&run, &path, plaintext.as_bytes()).ok()?;
         Some(Self {
             dir: dir.to_path_buf(),
             key: key.to_string(),
@@ -279,15 +355,6 @@ fn dpapi_unprotect(blob: &[u8]) -> Result<Vec<u8>, String> {
     }
 }
 
-#[cfg(not(windows))]
-fn dpapi_protect(plain: &[u8]) -> Result<Vec<u8>, String> {
-    Ok(plain.to_vec())
-}
-
-#[cfg(not(windows))]
-fn dpapi_unprotect(blob: &[u8]) -> Result<Vec<u8>, String> {
-    Ok(blob.to_vec())
-}
 
 /// Formats cookies strictly following the Netscape `cookies.txt` specification expected by `yt-dlp`.
 pub fn format_netscape_cookies_txt(entries: &[NetscapeCookieEntry]) -> String {
@@ -359,7 +426,9 @@ pub fn platform_login_urls(platform_id: &str) -> (&'static str, &'static [&'stat
     }
 }
 
-/// Opens an isolated WebView2 window with a separate `data_directory` and ZERO IPC capabilities.
+/// Opens an isolated login window with its own browsing data and ZERO IPC capabilities: a
+/// separate `data_directory` on Windows and Linux, a private (non-persistent) session on macOS,
+/// where WebKit has no data folders.
 pub fn open_isolated_login_window(app: &AppHandle, platform_id: &str) -> Result<String, String> {
     let key = if platform_id == "youtube_music" {
         "youtube"
@@ -394,7 +463,7 @@ pub fn open_isolated_login_window(app: &AppHandle, platform_id: &str) -> Result<
         other => other,
     };
 
-    WebviewWindowBuilder::new(app, &label, WebviewUrl::External(parsed_url))
+    let builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(parsed_url))
         .title(tr!(
             "Entrar em {display_name} — depois clique em 'Concluir login' no Boladão",
             "Sign in to {display_name}, then click 'Finish sign-in' in Boladão",
@@ -403,8 +472,15 @@ pub fn open_isolated_login_window(app: &AppHandle, platform_id: &str) -> Result<
         .inner_size(520.0, 680.0)
         .center()
         .background_color(tauri::window::Color(14, 14, 16, 255))
-        .user_agent(ua)
-        .data_directory(profile_dir)
+        .user_agent(ua);
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.data_directory(profile_dir);
+    #[cfg(target_os = "macos")]
+    let builder = {
+        let _ = profile_dir;
+        builder.incognito(true)
+    };
+    builder
         .build()
         .map_err(|e| tr!("Não foi possível abrir janela de login: {e}", "Couldn't open the sign-in window: {e}", "No se pudo abrir la ventana de inicio de sesión: {e}"))?;
 
@@ -517,7 +593,7 @@ pub fn logout_account(app: Option<&AppHandle>, platform_id: &str) {
         }
     }
     let dir = cookies_dir();
-    let _ = fs::remove_file(store_file(&dir, key));
+    forget_store(&dir, key);
     let _ = fs::remove_file(legacy_file(&dir, key));
     let _ = fs::remove_dir_all(webview_profiles_dir().join(key));
 }
@@ -586,7 +662,21 @@ mod tests {
         assert_eq!(load_store_in(dir.path(), "instagram").as_deref(), Some(SAMPLE));
     }
 
-    #[cfg(windows)]
+    /// Without a keychain (the tests never use the real one), the saved cookies and the copy
+    /// handed to yt-dlp are readable only by the user.
+    #[cfg(unix)]
+    #[test]
+    fn cookie_files_are_private_without_a_keychain() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        save_store_in(dir.path(), "instagram", SAMPLE).unwrap();
+        let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(&store_file(dir.path(), "instagram")), 0o600);
+        let lease = CookieLease::open_in(dir.path(), "instagram").unwrap();
+        assert_eq!(mode(lease.path()), 0o600);
+        assert_eq!(load_store_in(dir.path(), "instagram").as_deref(), Some(SAMPLE));
+    }
+
     #[test]
     fn lease_keeps_refreshed_cookies_and_deletes_the_plaintext_copy() {
         let dir = tempfile::tempdir().unwrap();

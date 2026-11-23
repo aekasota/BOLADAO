@@ -1,6 +1,7 @@
-//! Keeps a single Boladão running per Windows session. Two instances would share the same queue
+//! Keeps a single Boladão running per user session. Two instances would share the same queue
 //! database and download the same items twice, so a second launch only asks the open one to bring
-//! its window forward and then exits.
+//! its window forward and then exits. Windows uses a named event; Linux and macOS a lock file the
+//! kernel releases when the process ends (even in a crash) and a local socket for the wake-up.
 
 use std::time::Duration;
 
@@ -12,10 +13,14 @@ pub const WAIT_FOR_PID_ARG: &str = "--wait-for-pid";
 const EVENT_NAME: &str = r"Local\Boladao.Instance";
 
 /// Proof that this process is the running instance. It is never released before the process
-/// exits: the kernel frees the named event only when its last handle closes.
+/// exits: the kernel frees the named event (or the file lock) only when the process ends.
 pub struct InstanceGuard {
     #[cfg(windows)]
     event: usize,
+    #[cfg(unix)]
+    _lock: Option<std::fs::File>,
+    #[cfg(unix)]
+    listener: Option<std::os::unix::net::UnixListener>,
 }
 
 /// Returns the guard when no other instance is open in this session. When one is, asks it to
@@ -25,9 +30,51 @@ pub fn acquire() -> Option<InstanceGuard> {
     {
         acquire_named(EVENT_NAME)
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     {
-        Some(InstanceGuard {})
+        acquire_in(&crate::paths::app_local_dir())
+    }
+}
+
+#[cfg(unix)]
+fn acquire_in(dir: &std::path::Path) -> Option<InstanceGuard> {
+    use std::io::Write;
+    use std::os::unix::net::{UnixListener, UnixStream};
+
+    let socket_path = dir.join("instance.sock");
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(dir.join("instance.lock"));
+    let Ok(lock) = lock else {
+        // This check never keeps the app from opening.
+        eprintln!("[boladao] Não foi possível verificar se o Boladão já está aberto.");
+        return Some(InstanceGuard { _lock: None, listener: None });
+    };
+
+    match lock.try_lock() {
+        Ok(()) => {
+            // A socket left by a crashed instance would block the bind.
+            let _ = std::fs::remove_file(&socket_path);
+            let listener = UnixListener::bind(&socket_path).ok();
+            Some(InstanceGuard { _lock: Some(lock), listener })
+        }
+        Err(std::fs::TryLockError::WouldBlock) => {
+            // The open instance may still be starting: give its socket a moment to appear.
+            for _ in 0..20 {
+                if let Ok(mut stream) = UnixStream::connect(&socket_path) {
+                    let _ = stream.write_all(b"show\n");
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            None
+        }
+        Err(std::fs::TryLockError::Error(e)) => {
+            eprintln!("[boladao] Não foi possível verificar se o Boladão já está aberto ({e}).");
+            Some(InstanceGuard { _lock: None, listener: None })
+        }
     }
 }
 
@@ -51,8 +98,22 @@ impl InstanceGuard {
                 on_activate();
             });
         }
-        #[cfg(not(windows))]
-        let _ = on_activate;
+        #[cfg(unix)]
+        {
+            let InstanceGuard { _lock, listener } = self;
+            let Some(listener) = listener else {
+                return;
+            };
+            std::thread::spawn(move || {
+                // The lock file stays open (and locked) as long as this thread lives: for good.
+                let _held = _lock;
+                for stream in listener.incoming() {
+                    if stream.is_ok() {
+                        on_activate();
+                    }
+                }
+            });
+        }
     }
 }
 
@@ -122,8 +183,48 @@ fn wait_for_exit(pid: u32, timeout: Duration) {
             CloseHandle(process);
         }
     }
-    #[cfg(not(windows))]
-    let _ = (pid, timeout);
+    #[cfg(unix)]
+    {
+        let start = std::time::Instant::now();
+        // SAFETY: signal 0 only checks whether the process still exists.
+        while unsafe { libc::kill(pid as libc::pid_t, 0) } == 0 && start.elapsed() < timeout {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod unix_tests {
+    use super::*;
+
+    #[test]
+    fn a_second_launch_is_refused_and_wakes_the_open_instance() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = acquire_in(dir.path()).expect("a primeira abertura precisa ficar com a instância");
+        // The lock is per open file, so a second open in this same process also finds it taken.
+        assert!(acquire_in(dir.path()).is_none(), "a segunda abertura precisa ser recusada");
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        first.listen(move || {
+            let _ = tx.send(());
+        });
+        assert!(acquire_in(dir.path()).is_none());
+        rx.recv_timeout(Duration::from_secs(5))
+            .expect("a instância aberta precisa ser avisada para mostrar a janela");
+    }
+
+    #[test]
+    fn waits_for_the_closing_process_and_skips_missing_ones() {
+        let mut child = std::process::Command::new("/bin/sleep").arg("1").spawn().unwrap();
+        let pid = child.id();
+        let reaper = std::thread::spawn(move || child.wait());
+        wait_for_exit(pid, Duration::from_secs(10));
+        assert!(reaper.join().unwrap().is_ok());
+
+        let start = std::time::Instant::now();
+        wait_for_exit(i32::MAX as u32 - 1, Duration::from_secs(10));
+        assert!(start.elapsed() < Duration::from_secs(1), "um PID inexistente não pode travar a abertura");
+    }
 }
 
 #[cfg(all(test, windows))]

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Categories={{categories}}
+Comment=Downloader de vídeo e áudio com yt-dlp, Deno e FFmpeg embutidos
+Comment[en]=Video and audio downloader with yt-dlp, Deno and FFmpeg built in
+Comment[es]=Descargador de video y audio con yt-dlp, Deno y FFmpeg integrados
+Exec={{exec}}
+StartupWMClass={{exec}}
+Icon={{icon}}
+Name=Boladão
+Terminal=false
+Type=Application

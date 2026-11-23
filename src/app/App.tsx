@@ -21,6 +21,8 @@ import { OpArtCanvas } from "../shader/OpArtCanvas";
 import { UpdateChip } from "./UpdateNotice";
 import { LanguageChip } from "./LanguageChip";
 import { ResourcesChip } from "./ResourcesChip";
+import { ResizeEdges } from "./ResizeEdges";
+import { PLATFORM } from "../lib/platform";
 import { HTML_LANG, loadSystemLanguage, useLang, useT } from "../i18n";
 import { AppTab, useAppStore } from "../stores/appStore";
 import { useLimiterStore } from "../stores/limiterStore";
@@ -385,8 +387,11 @@ const MainApp: React.FC = () => {
         <OpArtCanvas />
 
         {/* Sculpted Top-Docked Architectural Notch + Corner Docks */}
+        <ResizeEdges />
+
         <header
           className="notch-header-shell"
+          data-platform={PLATFORM}
           data-tauri-drag-region
           onDoubleClick={(e) => {
             if (e.target === e.currentTarget) winToggleMax();
@@ -509,7 +514,8 @@ const MainApp: React.FC = () => {
             </svg>
           </motion.nav>
 
-          {/* Right Window Controls Pill */}
+          {/* Right Window Controls Pill (macOS keeps its own buttons, on the left) */}
+          {PLATFORM !== "macos" && (
           <div className="window-controls-pill">
             <button
               type="button"
@@ -536,6 +542,7 @@ const MainApp: React.FC = () => {
               <X size={14} />
             </button>
           </div>
+          )}
         </header>
 
 

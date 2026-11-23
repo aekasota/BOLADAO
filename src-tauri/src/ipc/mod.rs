@@ -5,6 +5,7 @@ use crate::cookies::{
     open_isolated_login_window, prepare_cookie_source, AccountAuthKind, ConnectedAccount,
 };
 use crate::gamemode::{GameModeMonitor, GameModeOverride, GameModeStatus};
+#[cfg(windows)]
 use crate::installer::{
     close_and_cleanup_temp_uninstaller, get_installer_defaults_info,
     launch_installed_app_and_close, run_install_pipeline, run_uninstall_pipeline,
@@ -423,7 +424,8 @@ pub fn open_data_folder_cmd(which: String) -> Result<(), String> {
     reveal_in_explorer(&dir)
 }
 
-/// Starts a native Windows drag-and-drop operation out of the app window into Explorer / DAW / Video Editor!
+/// Starts a native drag of the file out of the app window into the file manager, a DAW or a
+/// video editor. Sync command: it runs on the main thread, as GTK requires on Linux.
 #[tauri::command]
 pub fn start_file_drag(window: WebviewWindow, path: PathBuf) -> Result<(), String> {
     if !path.exists() {
@@ -439,6 +441,9 @@ pub fn start_file_drag(window: WebviewWindow, path: PathBuf) -> Result<(), Strin
     ];
     let item = drag::DragItem::Files(vec![path]);
     let image = drag::Image::Raw(DRAG_PNG.to_vec());
+    // On Linux the drag starts from the GTK window that holds the webview.
+    #[cfg(target_os = "linux")]
+    let window = window.gtk_window().map_err(|e| e.to_string())?;
     let _ = drag::start_drag(
         &window,
         item,
@@ -680,16 +685,19 @@ pub async fn run_workshop(
 }
 
 // Custom Op-Art Installer & Uninstaller IPC Commands
+#[cfg(windows)]
 #[tauri::command]
 pub fn get_launch_mode(mode: State<'_, LaunchMode>) -> LaunchMode {
     (*mode).clone()
 }
 
+#[cfg(windows)]
 #[tauri::command]
 pub fn get_installer_defaults() -> InstallerDefaults {
     get_installer_defaults_info()
 }
 
+#[cfg(windows)]
 #[tauri::command]
 pub async fn install_boladao(
     app: AppHandle,
@@ -706,6 +714,7 @@ pub async fn install_boladao(
     .await
 }
 
+#[cfg(windows)]
 #[tauri::command]
 pub async fn launch_installed_boladao(
     app: AppHandle,
@@ -716,6 +725,7 @@ pub async fn launch_installed_boladao(
         .map_err(|e| e.to_string())?
 }
 
+#[cfg(windows)]
 #[tauri::command]
 pub async fn uninstall_boladao(
     target_dir: PathBuf,
@@ -724,6 +734,7 @@ pub async fn uninstall_boladao(
     run_uninstall_pipeline(target_dir, remove_user_data).await
 }
 
+#[cfg(windows)]
 #[tauri::command]
 pub async fn close_uninstaller(app: AppHandle) -> Result<(), String> {
     tokio::task::spawn_blocking(move || close_and_cleanup_temp_uninstaller(&app))

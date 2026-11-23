@@ -1,0 +1,27 @@
+{
+  "ytdlp": {
+    "name": "yt-dlp",
+    "version": "2026.10.26",
+    "asset": "yt-dlp_macos",
+    "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp_macos",
+    "checksum_url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/SHA2-256SUMS",
+    "sha256": "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa"
+  },
+  "deno": {
+    "name": "deno",
+    "version": "2.9.8",
+    "asset": "deno-aarch64-apple-darwin.zip",
+    "url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-aarch64-apple-darwin.zip",
+    "checksum_url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-aarch64-apple-darwin.zip.sha256sum",
+    "sha256": "9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e"
+  },
+  "ffmpeg": {
+    "name": "ffmpeg",
+    "version": "8.1.2",
+    "asset": "ffmpeg-8.1.2.tar.xz",
+    "url": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz",
+    "checksum_url": null,
+    "sha256": "464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c",
+    "build": "source"
+  }
+}

@@ -397,7 +397,7 @@ pub async fn analyze_completed_file(
             run_hidden_output(&bins.ffmpeg_exe(), &wave_args, ProcessPriority::Idle).await
         {
             if wave_out.is_file() {
-                waveform_url = Some(format!("http://boladaomedia.localhost/wave/{fname}"));
+                waveform_url = Some(crate::paths::local_media_url("wave", &fname));
             }
         }
     }
@@ -449,7 +449,7 @@ pub async fn generate_spectrogram_and_cutoff(
     // Measure RMS dB in midband (2k-10k Hz) vs ultra-high band (>16.5k Hz) via `astats`
     let cutoff_note = detect_16khz_shelf_cutoff(path, bins).await;
     Ok((
-        format!("http://boladaomedia.localhost/spec/{fname}"),
+        crate::paths::local_media_url("spec", &fname),
         cutoff_note,
     ))
 }
