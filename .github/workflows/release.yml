@@ -100,7 +100,9 @@ jobs:
           gh release upload "$TAG" out/latest-linux-x86_64.json --clobber
 
   macos:
-    runs-on: macos-14
+    # The oldest macOS the app runs on comes from MACOSX_DEPLOYMENT_TARGET, not from the runner, so
+    # the job follows GitHub's newest image instead of a pinned one that gets retired.
+    runs-on: macos-latest
     timeout-minutes: 150
     env:
       MACOSX_DEPLOYMENT_TARGET: "12.0"
